@@ -6,7 +6,7 @@ pub type SpaceCoordinate = Float;
 pub type GridCoordinate = usize;
 
 /// Trait used to convert from SpaceCoordinate to GridCoordinate.
-/// 
+///
 /// This is needed because one cannot write impl blocks on built-in primitives.
 pub trait FromSpaceCoordinate {
     fn from_space_coordinate(coord: SpaceCoordinate) -> GridCoordinate;

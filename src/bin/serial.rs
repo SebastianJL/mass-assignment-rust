@@ -1,4 +1,4 @@
-use mass_assignment::{DIM, MAX, MIN, N_GRID, N_PARTICLES, coordinates::{SpaceCoordinate, GridCoordinate, FromSpaceCoordinate}};
+#![feature(float_next_up_down)]
 
 use mass_assignment::{
     coordinates::{FromSpaceCoordinate, GridCoordinate, SpaceCoordinate},
@@ -35,13 +35,11 @@ fn generate_particles() -> ParticleArray {
 /// Assign masses according to nearest grid point algorithm.
 fn assign_masses(particles: &ParticleArray, mass_grid: &mut MassGrid) {
     for space_coords in particles.outer_iter() {
-        // Todo: Maybe replace with macro for ndim support.
-        let grid_coords: [GridCoordinate; DIM] = space_coords
-            .into_iter()
-            .map(|coord| GridCoordinate::from_space_coordinate(*coord))
-            .collect::<Vec<GridCoordinate>>()
-            .try_into()
-            .unwrap();
+        let grid_coords = [
+            GridCoordinate::from_space_coordinate(space_coords[0]),
+            GridCoordinate::from_space_coordinate(space_coords[1]),
+        ];
         mass_grid[grid_coords] += 1;
     }
 }
+
