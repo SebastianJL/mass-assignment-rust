@@ -14,7 +14,7 @@ type ParticleArray = Array2<SpaceCoordinate>;
 fn main() {
     let particles = generate_particles();
     let mut mass_grid = MassGrid::zeros([N_GRID; DIM]);
-    assign_masses(&particles, &mut mass_grid);
+    assign_masses::<N_GRID>(&particles, &mut mass_grid);
 
     // dbg!(&mass_grid);
     let total: i32 = mass_grid.iter().sum();
@@ -33,13 +33,41 @@ fn generate_particles() -> ParticleArray {
 }
 
 /// Assign masses according to nearest grid point algorithm.
-fn assign_masses(particles: &ParticleArray, mass_grid: &mut MassGrid) {
+fn assign_masses<const N_GRID: usize>(particles: &ParticleArray, mass_grid: &mut MassGrid) {
     for space_coords in particles.outer_iter() {
         let grid_coords = [
-            GridCoordinate::from_space_coordinate(space_coords[0]),
-            GridCoordinate::from_space_coordinate(space_coords[1]),
+            GridCoordinate::from_space_coordinate::<N_GRID>(space_coords[0]),
+            GridCoordinate::from_space_coordinate::<N_GRID>(space_coords[1]),
         ];
         mass_grid[grid_coords] += 1;
     }
 }
 
+#[cfg(test)]
+mod test {
+    use super::*;
+    use ndarray::array;
+
+    #[test]
+    fn test_mass_assignment() {
+        // Warning! Only passes when DIM=2;
+        let particles = array![
+            [MIN, MIN],
+            [MIN, MIN],
+            [MAX.next_down(), MAX.next_down()],
+            [MIN, (MAX.next_down() + MIN) / 2.],
+            [(MAX + MIN) / 2., (MAX.next_down() + MIN) / 2.],
+        ];
+
+        const N_GRID: usize = 4;
+        let mut mass_grid = MassGrid::zeros([N_GRID; DIM]);
+        assign_masses::<N_GRID>(&particles, &mut mass_grid);
+        let mass_grid_precalculated = array![
+            [2, 1, 0, 0],
+            [0, 0, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, 0, 1],
+        ];
+        assert_eq!(mass_grid, mass_grid_precalculated);
+    }
+}
