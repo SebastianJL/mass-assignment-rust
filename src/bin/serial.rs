@@ -2,7 +2,7 @@
 
 use mass_assignment::{
     coordinates::{FromSpaceCoordinate, GridCoordinate, SpaceCoordinate},
-    DIM, MAX, MIN, N_GRID, N_PARTICLES,
+    DIM, MAX, MIN
 };
 
 use ndarray::{Array, Array2, Dim};
@@ -11,8 +11,15 @@ use rand::Rng;
 type MassGrid = Array<i32, Dim<[usize; DIM]>>;
 type ParticleArray = Array2<SpaceCoordinate>;
 
+// region Constants
+/// Total number of particles in simulation.
+pub const N_PARTICLES: usize = 1024;
+/// Number of grid cells for mass grid.
+pub const N_GRID: usize = 16;
+// endregion
+
 fn main() {
-    let particles = generate_particles();
+    let particles = generate_particles::<N_PARTICLES>();
     let mut mass_grid = MassGrid::zeros([N_GRID; DIM]);
     assign_masses::<N_GRID>(&particles, &mut mass_grid);
 
@@ -23,7 +30,7 @@ fn main() {
 
 /// Generate random particles. Particles are layed out as a simple array with shape (N_PARTICLE, DIM)
 /// that describe coordinates of the particle.
-fn generate_particles() -> ParticleArray {
+fn generate_particles<const N_PARTICLES: usize>() -> ParticleArray {
     let mut particles = ParticleArray::zeros([N_PARTICLES, DIM]);
     let mut rng = rand::thread_rng();
     for particle_coord in particles.iter_mut() {

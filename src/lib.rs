@@ -11,7 +11,3 @@ pub const MIN: Float = -1.;
 pub const MAX: Float = 1.;
 /// Number of dimensions of space.
 pub const DIM: usize = 2;
-/// Total number of particles in simulation.
-pub const N_PARTICLES: usize = 1024;
-/// Number of grid cells for mass grid.
-pub const N_GRID: usize = 16;
