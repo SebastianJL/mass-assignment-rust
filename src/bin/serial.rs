@@ -55,6 +55,8 @@ fn assign_masses<const N_GRID: usize>(particles: &ParticleArray, mass_grid: &mut
 mod test {
     use super::*;
     use ndarray::array;
+    extern crate test;
+    use test::Bencher;
 
     #[test]
     fn test_mass_assignment() {
@@ -86,13 +88,9 @@ mod test {
         const N_GRID: usize = 64;
         let particles = generate_particles::<N_PARTICLES>();
         let mut mass_grid = MassGrid::zeros([N_GRID; DIM]);
-        assign_masses::<N_GRID>(&particles, &mut mass_grid);
 
         b.iter(|| {
-            // Inner closure, the actual test
-            // for i in 1..100 {
-            //     black_box(x.powf(y).powf(x));
-            // }
+            assign_masses::<N_GRID>(&particles, &mut mass_grid)
         });
     }
 }
