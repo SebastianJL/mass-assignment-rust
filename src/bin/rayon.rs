@@ -1,7 +1,10 @@
 #![feature(float_next_up_down)]
 #![feature(test)]
 
+use std::sync::atomic::{AtomicI32, Ordering};
+
 use ndarray::{Array, Array2, Dim};
+use ndarray::parallel::prelude::*;
 use rand::Rng;
 
 use mass_assignment::{
@@ -9,7 +12,7 @@ use mass_assignment::{
     DIM, MAX, MIN,
 };
 
-type MassGrid = Array<i32, Dim<[usize; DIM]>>;
+type MassGrid = Array<AtomicI32, Dim<[usize; DIM]>>;
 type ParticleArray = Array2<SpaceCoordinate>;
 
 // region Constants
@@ -25,7 +28,7 @@ fn main() {
     assign_masses::<N_GRID>(&particles, &mut mass_grid);
     dbg!(&mass_grid);
 
-    let total: i32 = mass_grid.iter().sum();
+    let total: i32 = mass_grid.par_iter().map(|e| e.load(Ordering::SeqCst)).sum();
     dbg!(total);
 }
 
@@ -33,22 +36,22 @@ fn main() {
 /// that describe coordinates of the particle.
 fn generate_particles<const N_PARTICLES: usize>() -> ParticleArray {
     let mut particles = ParticleArray::zeros([N_PARTICLES, DIM]);
-    let mut rng = rand::thread_rng();
-    for particle_coord in particles.iter_mut() {
+    particles.par_map_inplace(|particle_coord| {
+        let mut rng = rand::thread_rng();
         *particle_coord = rng.gen_range(MIN..MAX).into();
-    }
+    });
     particles
 }
 
 /// Assign masses according to nearest grid point algorithm.
 fn assign_masses<const N_GRID: usize>(particles: &ParticleArray, mass_grid: &mut MassGrid) {
-    for space_coords in particles.outer_iter() {
+    particles.outer_iter().into_par_iter().for_each(|space_coords| {
         let grid_coords = [
             grid_coordinate_from::<N_GRID>(space_coords[0]),
             grid_coordinate_from::<N_GRID>(space_coords[1]),
         ];
-        mass_grid[grid_coords] += 1;
-    }
+        mass_grid[grid_coords].fetch_add(1, Ordering::SeqCst);
+    });
 }
 
 #[cfg(test)]
@@ -81,7 +84,7 @@ mod test {
             [0, 1, 0, 0],
             [0, 0, 0, 1],
         ];
-        assert_eq!(mass_grid, mass_grid_precalculated);
+        assert_eq!(mass_grid.map(|e| e.load(Ordering::SeqCst)), mass_grid_precalculated);
     }
 
     #[bench]
