@@ -25,7 +25,7 @@ mod test {
 
         let grid_coord = grid_coordinate_from::<N_GRID>((MAX.next_down() + MIN) / 2.);
         if N_GRID % 2 == 0 {
-            assert_eq!((N_GRID-1) / 2, grid_coord);
+            assert_eq!((N_GRID - 1) / 2, grid_coord);
         } else {
             assert_eq!(N_GRID / 2, grid_coord);
         }
@@ -72,5 +72,4 @@ mod test {
     fn test_grid_coordinate_n_grid_is_129() {
         test_grid_coordinate_from::<129>();
     }
-
 }

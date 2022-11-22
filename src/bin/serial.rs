@@ -1,13 +1,13 @@
 #![feature(float_next_up_down)]
 #![feature(test)]
 
-use mass_assignment::{
-    coordinates::{SpaceCoordinate, grid_coordinate_from},
-    DIM, MAX, MIN
-};
-
 use ndarray::{Array, Array2, Dim};
 use rand::Rng;
+
+use mass_assignment::{
+    coordinates::{grid_coordinate_from, SpaceCoordinate},
+    DIM, MAX, MIN,
+};
 
 type MassGrid = Array<i32, Dim<[usize; DIM]>>;
 type ParticleArray = Array2<SpaceCoordinate>;
@@ -53,10 +53,13 @@ fn assign_masses<const N_GRID: usize>(particles: &ParticleArray, mass_grid: &mut
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use ndarray::array;
-    extern crate test;
     use test::Bencher;
+
+    use ndarray::array;
+
+    use super::*;
+
+    extern crate test;
 
     #[test]
     fn test_mass_assignment() {
@@ -84,7 +87,7 @@ mod test {
     #[bench]
     fn bench_mass_assignment(b: &mut Bencher) {
         // Optionally include some setup
-        const N_PARTICLES: usize= 1024;
+        const N_PARTICLES: usize = 1024;
         const N_GRID: usize = 64;
         let particles = generate_particles::<N_PARTICLES>();
         let mut mass_grid = MassGrid::zeros([N_GRID; DIM]);
