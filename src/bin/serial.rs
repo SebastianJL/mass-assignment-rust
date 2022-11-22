@@ -1,7 +1,8 @@
 #![feature(float_next_up_down)]
+#![feature(test)]
 
 use mass_assignment::{
-    coordinates::{FromSpaceCoordinate, GridCoordinate, SpaceCoordinate},
+    coordinates::{SpaceCoordinate, grid_coordinate_from},
     DIM, MAX, MIN
 };
 
@@ -43,8 +44,8 @@ fn generate_particles<const N_PARTICLES: usize>() -> ParticleArray {
 fn assign_masses<const N_GRID: usize>(particles: &ParticleArray, mass_grid: &mut MassGrid) {
     for space_coords in particles.outer_iter() {
         let grid_coords = [
-            GridCoordinate::from_space_coordinate::<N_GRID>(space_coords[0]),
-            GridCoordinate::from_space_coordinate::<N_GRID>(space_coords[1]),
+            grid_coordinate_from::<N_GRID>(space_coords[0]),
+            grid_coordinate_from::<N_GRID>(space_coords[1]),
         ];
         mass_grid[grid_coords] += 1;
     }
@@ -76,5 +77,22 @@ mod test {
             [0, 0, 0, 1],
         ];
         assert_eq!(mass_grid, mass_grid_precalculated);
+    }
+
+    #[bench]
+    fn bench_mass_assignment(b: &mut Bencher) {
+        // Optionally include some setup
+        const N_PARTICLES: usize= 1024;
+        const N_GRID: usize = 64;
+        let particles = generate_particles::<N_PARTICLES>();
+        let mut mass_grid = MassGrid::zeros([N_GRID; DIM]);
+        assign_masses::<N_GRID>(&particles, &mut mass_grid);
+
+        b.iter(|| {
+            // Inner closure, the actual test
+            // for i in 1..100 {
+            //     black_box(x.powf(y).powf(x));
+            // }
+        });
     }
 }
