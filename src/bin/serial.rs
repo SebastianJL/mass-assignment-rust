@@ -5,7 +5,7 @@ use ndarray::{Array, Array2, Dim};
 use rand::Rng;
 
 use mass_assignment::{
-    coordinates::{grid_coordinate_from, SpaceCoordinate},
+    coordinates::{grid_coordinate, SpaceCoordinate},
     DIM, MAX, MIN,
 };
 
@@ -44,8 +44,8 @@ fn generate_particles<const N_PARTICLES: usize>() -> ParticleArray {
 fn assign_masses<const N_GRID: usize>(particles: &ParticleArray, mass_grid: &mut MassGrid) {
     for space_coords in particles.outer_iter() {
         let grid_coords = [
-            grid_coordinate_from::<N_GRID>(space_coords[0]),
-            grid_coordinate_from::<N_GRID>(space_coords[1]),
+            grid_coordinate::<N_GRID>(space_coords[0]).min(N_GRID - 1),
+            grid_coordinate::<N_GRID>(space_coords[1]).min(N_GRID - 1),
         ];
         mass_grid[grid_coords] += 1;
     }
@@ -76,9 +76,9 @@ mod test {
         let mut mass_grid = MassGrid::default([N_GRID; DIM]);
         assign_masses::<N_GRID>(&particles, &mut mass_grid);
         let mass_grid_precalculated = array![
-            [2, 1, 0, 0],
+            [2, 0, 1, 0],
             [0, 0, 0, 0],
-            [0, 1, 0, 0],
+            [0, 0, 1, 0],
             [0, 0, 0, 1],
         ];
         assert_eq!(mass_grid, mass_grid_precalculated);
