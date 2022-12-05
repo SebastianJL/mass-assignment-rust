@@ -24,8 +24,8 @@ pub const N_GRID: usize = 16;
 
 fn main() {
     let particles = generate_particles::<N_PARTICLES>();
-    let mut mass_grid = MassGrid::default([N_GRID; DIM]);
-    assign_masses::<N_GRID>(&particles, &mut mass_grid);
+    let mass_grid = MassGrid::default([N_GRID; DIM]);
+    assign_masses::<N_GRID>(&particles, &mass_grid);
     dbg!(&mass_grid);
 
     let total: i32 = mass_grid.par_iter().map(|e| e.load(Ordering::SeqCst)).sum();
@@ -44,7 +44,7 @@ fn generate_particles<const N_PARTICLES: usize>() -> ParticleArray {
 }
 
 /// Assign masses according to nearest grid point algorithm.
-fn assign_masses<const N_GRID: usize>(particles: &ParticleArray, mass_grid: &mut MassGrid) {
+fn assign_masses<const N_GRID: usize>(particles: &ParticleArray, mass_grid: &MassGrid) {
     particles.outer_iter().into_par_iter().for_each(|space_coords| {
         let grid_coords = [
             grid_coordinate::<N_GRID>(space_coords[0]).min(N_GRID - 1),
