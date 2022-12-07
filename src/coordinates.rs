@@ -1,5 +1,3 @@
-use std::iter::repeat;
-
 use crate::{Float, MAX, MIN};
 
 /// 1D continuous coordinate.
@@ -21,27 +19,14 @@ pub fn grid_index_from_coordinate<const N_GRID: usize>(coord: SpaceCoordinate) -
     ((coord - MIN) * scaling).floor() as GridIndex
 }
 
-/// Distribute `n_grid` cells uniformly along `n_hunk` hunks.
-///
-/// Give all hunks `N_GRID / N_HUNK` cells. Give the first `N_GRID % N_HUNK` hunks one more.
-/// Also included the N_GRID for convenience.
-pub fn hunk_starting_indices_vec<const N_GRID: usize, const N_HUNK: usize>() -> Vec<GridIndex> {
-    let rest = N_GRID % N_HUNK;
-    let base_size = N_GRID / N_HUNK;
-    let large_hunks = (0..rest).map(|hunk_index| (base_size + 1) * hunk_index);
-    let small_hunks =
-        (rest..=N_HUNK).map(|hunk_index| (base_size + 1) * rest + base_size * (hunk_index - rest));
-    large_hunks.chain(small_hunks).collect()
+pub fn hunk_index_from_grid_index<const N_GRID: usize, const N_HUNK: usize>(
+    grid_index: GridIndex,
+) -> HunkIndex {
+    (grid_index * N_HUNK) / (N_GRID + N_HUNK + 1)
 }
 
-pub fn grid_to_hunk_index_vec<const N_GRID: usize, const N_HUNK: usize>() -> Vec<HunkIndex> {
-    let hunk_start = hunk_starting_indices_vec::<N_GRID, N_HUNK>();
-    let mut result = Vec::with_capacity(N_GRID);
-    for (i, w) in hunk_start.windows(2).into_iter().enumerate() {
-        let hunk_width = w[1] - w[0];
-        result.extend(repeat(i).take(hunk_width));
-    }
-    result
+pub fn hunk_size<const N_GRID: usize, const N_HUNK: usize>() -> usize {
+    (N_GRID + N_HUNK + 1) / N_HUNK
 }
 
 #[cfg(test)]
@@ -100,18 +85,20 @@ mod test {
     }
 
     #[test]
-    fn test_grid_index_from_hunk() {
+    fn test_hunk_index_from_grid_index() {
         const N_GRID: usize = 11;
         const N_HUNK: usize = 3;
-        let hunk_starting_indices = hunk_starting_indices_vec::<N_GRID, N_HUNK>();
-        assert_eq!(vec![0, 4, 8, 11], hunk_starting_indices);
+        let hunk_starting_indices: Vec<_> = (0..N_GRID)
+            .map(|i| hunk_index_from_grid_index::<N_GRID, N_HUNK>(i))
+            .collect();
+        assert_eq!(vec![0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2], hunk_starting_indices);
     }
 
     #[test]
-    fn test_grid_to_hunk_index() {
+    fn test_hunk_size() {
         const N_GRID: usize = 11;
         const N_HUNK: usize = 3;
-        let grid_to_hunk = grid_to_hunk_index_vec::<N_GRID, N_HUNK>();
-        assert_eq!(vec![0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2], grid_to_hunk)
+
+        assert_eq!(5, hunk_size::<N_GRID, N_HUNK>());
     }
 }
