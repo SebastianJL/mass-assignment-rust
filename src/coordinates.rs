@@ -13,21 +13,26 @@ pub type HunkIndex = usize;
 /// # WARNING
 /// This doesn't guarantee that the `result < N_GRID` for `coord <` [MAX].
 /// So if you need that you need to take the appropriate measures on the result.
+/// 
+/// # Panics
+/// Panics if `N_GRID==0`.
 pub fn grid_index_from_coordinate<const N_GRID: usize>(coord: SpaceCoordinate) -> GridIndex {
     assert_ne!(N_GRID, 0_usize, "N_GRID cannot be 0.");
     let scaling = N_GRID as Float / (MAX - MIN);
     ((coord - MIN) * scaling).floor() as GridIndex
 }
 
-pub fn hunk_index_from_grid_index<const N_GRID: usize, const N_HUNK: usize>(
+pub const fn hunk_index_from_grid_index<const N_GRID: usize, const N_HUNK: usize>(
     grid_index: GridIndex,
 ) -> HunkIndex {
-    (grid_index * N_HUNK) / (N_GRID + N_HUNK + 1)
+    grid_index / hunk_size::<N_GRID, N_HUNK>()
 }
 
-pub fn hunk_size<const N_GRID: usize, const N_HUNK: usize>() -> usize {
-    (N_GRID + N_HUNK + 1) / N_HUNK
+pub const fn hunk_size<const N_GRID: usize, const N_HUNK: usize>() -> usize {
+    (N_GRID + N_HUNK - 1) / N_HUNK
 }
+
+// pub fn
 
 #[cfg(test)]
 mod test {
@@ -91,7 +96,7 @@ mod test {
         let hunk_starting_indices: Vec<_> = (0..N_GRID)
             .map(|i| hunk_index_from_grid_index::<N_GRID, N_HUNK>(i))
             .collect();
-        assert_eq!(vec![0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2], hunk_starting_indices);
+        assert_eq!(vec![0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2], hunk_starting_indices);
     }
 
     #[test]
@@ -99,6 +104,6 @@ mod test {
         const N_GRID: usize = 11;
         const N_HUNK: usize = 3;
 
-        assert_eq!(5, hunk_size::<N_GRID, N_HUNK>());
+        assert_eq!(4, hunk_size::<N_GRID, N_HUNK>());
     }
 }
