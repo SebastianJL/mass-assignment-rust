@@ -2,6 +2,7 @@
 #![feature(test)]
 
 use std::sync::atomic::{AtomicI32, Ordering};
+use std::time::Instant;
 
 use ndarray::{Array, Array2, Dim};
 use ndarray::parallel::prelude::*;
@@ -23,6 +24,8 @@ pub const N_GRID: usize = 16;
 // endregion
 
 fn main() {
+    let start = Instant::now();
+
     let particles = generate_particles::<N_PARTICLES>();
     let mass_grid = MassGrid::default([N_GRID; DIM]);
     assign_masses::<N_GRID>(&particles, &mass_grid);
@@ -30,6 +33,9 @@ fn main() {
 
     let total: i32 = mass_grid.par_iter().map(|e| e.load(Ordering::SeqCst)).sum();
     dbg!(total);
+
+    let runtime = start.elapsed();
+    dbg!(runtime);
 }
 
 /// Generate random particles. Particles are layed out as a simple array with shape (N_PARTICLE, DIM)

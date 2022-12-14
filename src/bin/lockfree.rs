@@ -1,6 +1,7 @@
 #![feature(float_next_up_down)]
 
 use std::thread;
+use std::time::Instant;
 
 use itertools::izip;
 use lockfree::channel::mpsc::{Receiver, Sender};
@@ -93,6 +94,8 @@ impl ThreadComm {
 }
 
 fn main() {
+    let start = Instant::now();
+
     const CHUNK_SIZE: usize = (N_PARTICLES + N_THREADS - 1) / N_THREADS;
     let mut communicators = ThreadComm::create_communicators(N_THREADS);
     let particles = generate_particles::<N_PARTICLES>();
@@ -129,6 +132,9 @@ fn main() {
             });
         }
     });
+
+    let runtime = start.elapsed();
+    dbg!(runtime);
 }
 
 /// Generate random particles. Particles are layed out as a simple array with shape (`N_PARTICLES`, DIM)

@@ -1,6 +1,8 @@
 #![feature(float_next_up_down)]
 #![feature(test)]
 
+use std::time::Instant;
+
 use ndarray::{Array, Array2, Dim};
 use rand::Rng;
 
@@ -20,13 +22,18 @@ pub const N_GRID: usize = 16;
 // endregion
 
 fn main() {
+    let start = Instant::now();
+
     let particles = generate_particles::<N_PARTICLES>();
     let mut mass_grid = MassGrid::default([N_GRID; DIM]);
     assign_masses::<N_GRID>(&particles, &mut mass_grid);
-    dbg!(&mass_grid);
+    let runtime = start.elapsed();
+    dbg!(runtime);
 
+    dbg!(&mass_grid);
     let total: i32 = mass_grid.iter().sum();
     dbg!(total);
+
 }
 
 /// Generate random particles. Particles are layed out as a simple array with shape (N_PARTICLE, DIM)
