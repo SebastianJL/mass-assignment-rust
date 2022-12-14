@@ -1,5 +1,4 @@
 #![feature(float_next_up_down)]
-#![feature(test)]
 
 use std::thread;
 
@@ -98,9 +97,7 @@ fn main() {
     let mut communicators = ThreadComm::create_communicators(N_THREADS);
     let particles = generate_particles::<N_PARTICLES>();
     thread::scope(|s| {
-        for (comm, p_local) in
-            communicators.iter_mut().zip(particles.chunks(CHUNK_SIZE))
-        {
+        for (comm, p_local) in communicators.iter_mut().zip(particles.chunks(CHUNK_SIZE)) {
             s.spawn(move || {
                 let mut mass_grid = MassGrid::default([N_HUNKS, N_GRID]);
                 assign_masses::<N_GRID, N_HUNKS>(p_local, &mut mass_grid, comm);
@@ -132,7 +129,6 @@ fn main() {
             });
         }
     });
-    dbg!(&communicators);
 }
 
 /// Generate random particles. Particles are layed out as a simple array with shape (`N_PARTICLES`, DIM)
@@ -141,7 +137,12 @@ fn generate_particles<const N_PARTICLES: usize>() -> Vec<Particle> {
     let mut rng = <StdRng as rand::SeedableRng>::seed_from_u64(42);
     // let mut rng = rand::thread_rng();
     (0..N_PARTICLES)
-        .map(|_| [rand::Rng::gen_range(&mut rng, MIN..MAX), rand::Rng::gen_range(&mut rng, MIN..MAX)])
+        .map(|_| {
+            [
+                rand::Rng::gen_range(&mut rng, MIN..MAX),
+                rand::Rng::gen_range(&mut rng, MIN..MAX),
+            ]
+        })
         .collect()
 }
 
@@ -163,7 +164,9 @@ fn assign_masses<const N_GRID: usize, const N_HUNKS: usize>(
             let local_grid_indices = (grid_indices.0 - hunk_index * hunk_size, grid_indices.1);
             mass_grid[local_grid_indices] += 1;
         } else {
-            comm.index_channel.tx[hunk_index].send(grid_indices).unwrap();
+            comm.index_channel.tx[hunk_index]
+                .send(grid_indices)
+                .unwrap();
         }
     }
 
@@ -195,13 +198,10 @@ fn assign_masses<const N_GRID: usize, const N_HUNKS: usize>(
 
 #[cfg(test)]
 mod test {
-    use test::Bencher;
 
     use ndarray::array;
 
     use super::*;
-
-    extern crate test;
 
     #[test]
     fn test_mass_assignment() {
@@ -222,39 +222,5 @@ mod test {
         let mass_grid_precalculated =
             array![[2, 0, 1, 0], [0, 0, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1],];
         assert_eq!(mass_grid, mass_grid_precalculated);
-    }
-
-    #[bench]
-    fn bench_particle_generation(b: &mut Bencher) {
-        const N_PARTICLES: usize = 1024;
-
-        b.iter(|| generate_particles::<N_PARTICLES>());
-    }
-
-    #[bench]
-    fn bench_mass_assignment(b: &mut Bencher) {
-        // Optionally include some setup
-        const N_PARTICLES: usize = 1024;
-        const N_GRID: usize = 64;
-        const N_THREADS: usize = 1;
-        const N_HUNKS: usize = N_THREADS;
-        let mut communicators = ThreadComm::create_communicators(N_THREADS);
-        let particles = generate_particles::<N_PARTICLES>();
-        const CHUNK_SIZE: usize = (N_PARTICLES + N_THREADS - 1) / N_THREADS;
-
-        b.iter(|| {
-            thread::scope(|s| {
-                for (comm, particles_local) in
-                    communicators.iter_mut().zip(particles.chunks(CHUNK_SIZE))
-                {
-                    s.spawn(|| {
-                        let mut comm = comm;
-                        let p_local = &*particles_local;
-                        let mut mass_grid = MassGrid::default([N_HUNKS, N_GRID]);
-                        assign_masses::<N_GRID, N_HUNKS>(p_local, &mut mass_grid, &mut comm);
-                    });
-                }
-            });
-        });
     }
 }
