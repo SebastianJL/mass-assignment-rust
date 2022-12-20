@@ -20,10 +20,10 @@ use rand::rngs::StdRng;
 pub const N_PARTICLES: usize = 1024;
 /// Number of grid cells for mass grid.
 pub const N_GRID: usize = 16;
-/// Number of hunks. A hunk is a collection of slabs. I.e a hunk of a 2d grid [N, N] might be [2, N].
-const N_HUNKS: usize = 4;
 /// Number of threads.
-const N_THREADS: usize = N_HUNKS;
+const N_THREADS: usize = 3;
+/// Number of hunks. A hunk is a collection of slabs. I.e a hunk of a 2d grid [N, N] might be [2, N].
+const N_HUNKS: usize = N_THREADS;
 // endregion
 
 type MassEntry = usize;
@@ -99,10 +99,11 @@ fn main() {
     const CHUNK_SIZE: usize = (N_PARTICLES + N_THREADS - 1) / N_THREADS;
     let mut communicators = ThreadComm::create_communicators(N_THREADS);
     let particles = generate_particles::<N_PARTICLES>();
+    let hunk_size = hunk_size::<N_GRID, N_HUNKS>();
     thread::scope(|s| {
         for (comm, p_local) in communicators.iter_mut().zip(particles.chunks(CHUNK_SIZE)) {
             s.spawn(move || {
-                let mut mass_grid = MassGrid::default([N_HUNKS, N_GRID]);
+                let mut mass_grid = MassGrid::default([hunk_size, N_GRID]);
                 assign_masses::<N_GRID, N_HUNKS>(p_local, &mut mass_grid, comm);
 
                 // Calculate local mass sum and send.
