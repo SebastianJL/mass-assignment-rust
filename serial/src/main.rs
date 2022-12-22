@@ -1,12 +1,9 @@
-#![feature(float_next_up_down)]
-#![feature(test)]
-
 use std::time::Instant;
 
 use ndarray::{Array, Array2, Dim};
 use rand::Rng;
 
-use mass_assignment::{
+use serial::{
     coordinates::{grid_index_from_coordinate, SpaceCoordinate},
     DIM, MAX, MIN,
 };
@@ -60,13 +57,10 @@ fn assign_masses<const N_GRID: usize>(particles: &ParticleArray, mass_grid: &mut
 
 #[cfg(test)]
 mod test {
-    use test::Bencher;
 
     use ndarray::array;
 
     use super::*;
-
-    extern crate test;
 
     #[test]
     fn test_mass_assignment() {
@@ -74,9 +68,9 @@ mod test {
         let particles = array![
             [MIN, MIN],
             [MIN, MIN],
-            [MAX.next_down(), MAX.next_down()],
-            [MIN, (MAX.next_down() + MIN) / 2.],
-            [(MAX + MIN) / 2., (MAX.next_down() + MIN) / 2.],
+            [MAX, MAX],
+            [MIN, (MAX + MIN) / 2.],
+            [(MAX + MIN) / 2., (MAX + MIN) / 2.],
         ];
 
         const N_GRID: usize = 4;
@@ -89,27 +83,5 @@ mod test {
             [0, 0, 0, 1],
         ];
         assert_eq!(mass_grid, mass_grid_precalculated);
-    }
-
-    #[bench]
-    fn bench_particle_generation(b: &mut Bencher) {
-        const N_PARTICLES: usize = 1024;
-
-        b.iter(|| {
-            generate_particles::<N_PARTICLES>()
-        });
-    }
-
-    #[bench]
-    fn bench_mass_assignment(b: &mut Bencher) {
-        // Optionally include some setup
-        const N_PARTICLES: usize = 1024;
-        const N_GRID: usize = 64;
-        let particles = generate_particles::<N_PARTICLES>();
-        let mut mass_grid = MassGrid::default([N_GRID; DIM]);
-
-        b.iter(|| {
-            assign_masses::<N_GRID>(&particles, &mut mass_grid)
-        });
     }
 }
