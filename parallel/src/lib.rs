@@ -1,5 +1,3 @@
-#![feature(float_next_up_down)]
-
 pub mod coordinates;
 
 /// Choose between f32 and f64 to change precision of floating point numbers.

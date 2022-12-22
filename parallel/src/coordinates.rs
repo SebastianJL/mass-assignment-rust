@@ -13,7 +13,7 @@ pub type HunkIndex = usize;
 /// # WARNING
 /// This doesn't guarantee that the `result < N_GRID` for `coord <` [MAX].
 /// So if you need that you need to take the appropriate measures on the result.
-/// 
+///
 /// # Panics
 /// Panics if `N_GRID==0`.
 pub fn grid_index_from_coordinate<const N_GRID: usize>(coord: SpaceCoordinate) -> GridIndex {
@@ -22,14 +22,18 @@ pub fn grid_index_from_coordinate<const N_GRID: usize>(coord: SpaceCoordinate) -
     ((coord - MIN) * scaling).floor() as GridIndex
 }
 
-pub const fn hunk_index_from_grid_index<const N_GRID: usize, const N_HUNK: usize>(
+pub const fn hunk_index_from_grid_index<const N_GRID: usize, const N_HUNKS: usize>(
     grid_index: GridIndex,
 ) -> HunkIndex {
-    grid_index / hunk_size::<N_GRID, N_HUNK>()
+    grid_index / get_hunk_size(N_GRID, N_HUNKS)
 }
 
-pub const fn hunk_size<const N_GRID: usize, const N_HUNK: usize>() -> usize {
-    (N_GRID + N_HUNK - 1) / N_HUNK
+pub const fn get_hunk_size(n_grid: usize, n_hunks: usize) -> usize {
+    (n_grid + n_hunks - 1) / n_hunks
+}
+
+pub const fn get_chunk_size(n_particles: usize, n_chunks: usize) -> usize {
+    (n_particles + n_chunks - 1) / n_chunks
 }
 
 // pub fn
@@ -104,6 +108,6 @@ mod test {
         const N_GRID: usize = 11;
         const N_HUNK: usize = 3;
 
-        assert_eq!(4, hunk_size::<N_GRID, N_HUNK>());
+        assert_eq!(4, get_hunk_size(N_GRID, N_HUNK));
     }
 }

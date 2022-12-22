@@ -1,5 +1,5 @@
 [package]
-name = "mass-assignment"
+name = "parallel"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,5 +8,5 @@ edition = "2021"
 [dependencies]
 itertools = "0.10.5"
 lockfree = "0.5.1"
-ndarray = { version = "0.15.6", features = ["rayon"] }
+ndarray = "0.15.6"
 rand = "0.8.5"

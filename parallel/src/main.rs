@@ -1,15 +1,13 @@
-#![feature(float_next_up_down)]
-
 use std::thread;
 use std::time::Instant;
 
 use itertools::izip;
 use lockfree::channel::mpsc::{Receiver, Sender};
 use lockfree::channel::{mpsc, RecvErr};
-use mass_assignment::coordinates::{hunk_index_from_grid_index, hunk_size};
+use parallel::coordinates::{get_hunk_size, hunk_index_from_grid_index, get_chunk_size};
 use ndarray::{Array, Dim};
 
-use mass_assignment::{
+use parallel::{
     coordinates::{grid_index_from_coordinate, GridIndex, SpaceCoordinate},
     DIM, MAX, MIN,
 };
@@ -96,14 +94,16 @@ impl ThreadComm {
 fn main() {
     let start = Instant::now();
 
-    const CHUNK_SIZE: usize = (N_PARTICLES + N_THREADS - 1) / N_THREADS;
+    // Number of particles per thread.
+    const CHUNK_SIZE: usize = get_chunk_size(N_PARTICLES, N_THREADS);
+    // Number of slabs per hunk.
+    const HUNK_SIZE: usize = get_hunk_size(N_GRID, N_HUNKS);
     let mut communicators = ThreadComm::create_communicators(N_THREADS);
     let particles = generate_particles::<N_PARTICLES>();
-    let hunk_size = hunk_size::<N_GRID, N_HUNKS>();
     thread::scope(|s| {
         for (comm, p_local) in communicators.iter_mut().zip(particles.chunks(CHUNK_SIZE)) {
             s.spawn(move || {
-                let mut mass_grid = MassGrid::default([hunk_size, N_GRID]);
+                let mut mass_grid = MassGrid::default([HUNK_SIZE, N_GRID]);
                 assign_masses::<N_GRID, N_HUNKS>(p_local, &mut mass_grid, comm);
 
                 // Calculate local mass sum and send.
@@ -128,7 +128,6 @@ fn main() {
                     }
                     dbg!(total_mass);
                     dbg!(p_local.len());
-                    dbg!(p_local.len() * N_THREADS);
                 }
             });
         }
@@ -159,7 +158,7 @@ fn assign_masses<const N_GRID: usize, const N_HUNKS: usize>(
     mass_grid: &mut MassGrid,
     comm: &mut ThreadComm,
 ) {
-    let hunk_size = hunk_size::<N_GRID, N_HUNKS>();
+    let hunk_size = get_hunk_size(N_GRID, N_HUNKS);
     // Process particles belonging to own thread and send others to their threads.
     for space_coords in particles.iter() {
         let grid_indices = (
@@ -216,9 +215,9 @@ mod test {
         let particles = vec![
             [MIN, MIN],
             [MIN, MIN],
-            [MAX.next_down(), MAX.next_down()],
-            [MIN, (MAX.next_down() + MIN) / 2.],
-            [(MAX + MIN) / 2., (MAX.next_down() + MIN) / 2.],
+            [MAX, MAX],
+            [MIN, (MAX + MIN) / 2.],
+            [(MAX + MIN) / 2., (MAX + MIN) / 2.],
         ];
 
         const N_GRID: usize = 4;
