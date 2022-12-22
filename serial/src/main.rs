@@ -39,7 +39,7 @@ fn generate_particles<const N_PARTICLES: usize>() -> ParticleArray {
     let mut particles = ParticleArray::zeros([N_PARTICLES, DIM]);
     let mut rng = rand::thread_rng();
     for particle_coord in particles.iter_mut() {
-        *particle_coord = rng.gen_range(MIN..MAX).into();
+        *particle_coord = rng.gen_range(MIN..MAX);
     }
     particles
 }
