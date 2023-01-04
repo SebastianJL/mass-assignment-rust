@@ -4,25 +4,14 @@ use std::time::Instant;
 use itertools::izip;
 use lockfree::channel::mpsc::{Receiver, Sender};
 use lockfree::channel::{mpsc, RecvErr};
-use parallel::coordinates::{get_hunk_size, hunk_index_from_grid_index, get_chunk_size};
 use ndarray::{Array, Dim};
+use parallel::coordinates::{get_chunk_size, get_hunk_size, hunk_index_from_grid_index};
 
 use parallel::{
     coordinates::{grid_index_from_coordinate, GridIndex, SpaceCoordinate},
     DIM, MAX, MIN,
 };
 use rand::rngs::StdRng;
-
-// region Constants
-/// Total number of particles in simulation.
-pub const N_PARTICLES: usize = 1024;
-/// Number of grid cells for mass grid.
-pub const N_GRID: usize = 16;
-/// Number of threads.
-const N_THREADS: usize = 3;
-/// Number of hunks. A hunk is a collection of slabs. I.e a hunk of a 2d grid [N, N] might be [2, N].
-const N_HUNKS: usize = N_THREADS;
-// endregion
 
 type MassEntry = usize;
 type MassGrid = Array<MassEntry, Dim<[usize; DIM]>>;
@@ -31,6 +20,8 @@ type Particle = [SpaceCoordinate; 2];
 #[derive(Debug)]
 struct ThreadComm {
     rank: usize,
+    // Total number of threads.
+    size: usize,
     // Channel for sending indices where mass has to be assigned.
     index_channel: IndexChannel,
     // Channel for gathering total mass in rank 0.
@@ -72,6 +63,7 @@ impl ThreadComm {
         {
             let comm = ThreadComm {
                 rank: i,
+                size: number,
                 index_channel: IndexChannel {
                     rx: index_receiver,
                     tx: index_senders.clone(),
@@ -93,6 +85,15 @@ impl ThreadComm {
 
 fn main() {
     let start = Instant::now();
+
+    /// Total number of particles in simulation.
+    const N_PARTICLES: usize = 1024;
+    /// Number of grid cells for mass grid.
+    const N_GRID: usize = 16;
+    /// Number of threads.
+    const N_THREADS: usize = 3;
+    /// Number of hunks. A hunk is a collection of slabs. I.e a hunk of a 2d grid [N, N] might be [2, N].
+    const N_HUNKS: usize = N_THREADS;
 
     // Number of particles per thread.
     const CHUNK_SIZE: usize = get_chunk_size(N_PARTICLES, N_THREADS);
@@ -182,7 +183,7 @@ fn assign_masses<const N_GRID: usize, const N_HUNKS: usize>(
     }
 
     // Receive mass assignment finished.
-    for _ in 0..N_THREADS {
+    for _ in 0..comm.size {
         loop {
             match comm.sync_channel.rx.recv() {
                 Ok(_msg) => {

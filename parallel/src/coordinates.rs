@@ -36,8 +36,6 @@ pub const fn get_chunk_size(n_particles: usize, n_chunks: usize) -> usize {
     (n_particles + n_chunks - 1) / n_chunks
 }
 
-// pub fn
-
 #[cfg(test)]
 mod test {
     use super::*;
