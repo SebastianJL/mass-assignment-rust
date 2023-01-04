@@ -6,14 +6,13 @@ use lockfree::channel::mpsc::{Receiver, Sender};
 use lockfree::channel::{mpsc, RecvErr};
 use ndarray::{Array, Dim};
 use parallel::coordinates::{get_chunk_size, get_hunk_size, hunk_index_from_grid_index};
-
 use parallel::{
     coordinates::{grid_index_from_coordinate, GridIndex, SpaceCoordinate},
     DIM, MAX, MIN,
 };
 use rand::rngs::StdRng;
 
-type MassEntry = usize;
+type MassEntry = u32;
 type MassGrid = Array<MassEntry, Dim<[usize; DIM]>>;
 type Particle = [SpaceCoordinate; 2];
 
@@ -87,12 +86,15 @@ fn main() {
     let start = Instant::now();
 
     /// Total number of particles in simulation.
-    const N_PARTICLES: usize = 1024;
-    /// Number of grid cells for mass grid.
-    const N_GRID: usize = 16;
+    const N_PARTICLES: usize = 1<<23;
+    /// Number of grid cells along one axis for mass grid.
+    const N_GRID: usize = 1<<15; 
+    /// Size of 2d super cells {N_Cell, N_Cell} on mass grid.
+    const N_CELL: usize = 1<<6;
+    dbg!(N_GRID/N_CELL);
     /// Number of threads.
-    const N_THREADS: usize = 3;
-    /// Number of hunks. A hunk is a collection of slabs. I.e a hunk of a 2d grid [N, N] might be [2, N].
+    const N_THREADS: usize = 4;
+    /// Number of hunks. A hunk is a collection of slabs. I.e a hunk of a 2d grid [N, N] is [HUNK_SIZE, N].
     const N_HUNKS: usize = N_THREADS;
 
     // Number of particles per thread.
@@ -104,7 +106,7 @@ fn main() {
     thread::scope(|s| {
         for (comm, p_local) in communicators.iter_mut().zip(particles.chunks(CHUNK_SIZE)) {
             s.spawn(move || {
-                let mut mass_grid = MassGrid::default([HUNK_SIZE, N_GRID]);
+                let mut mass_grid = MassGrid::zeros([HUNK_SIZE, N_GRID]);
                 assign_masses::<N_GRID, N_HUNKS>(p_local, &mut mass_grid, comm);
 
                 // Calculate local mass sum and send.
@@ -127,8 +129,7 @@ fn main() {
                             }
                         }
                     }
-                    dbg!(total_mass);
-                    dbg!(p_local.len());
+                    assert_eq!(total_mass as usize, N_PARTICLES);
                 }
             });
         }
