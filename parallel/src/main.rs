@@ -113,10 +113,13 @@ fn main() {
 
     /// Total number of particles in simulation.
     const N_PARTICLES: usize = 1 << 23;
+    dbg!(N_PARTICLES);
     /// Number of grid cells along one axis for mass grid.
     const N_GRID: usize = 1 << 15;
+    dbg!(N_GRID);
     /// Size of 2d super cells {N_Cell, N_Cell} on mass grid.
     const N_CELL: usize = 1 << 6;
+    dbg!(N_CELL);
     dbg!(N_GRID / N_CELL);
     /// Number of threads.
     const N_THREADS: usize = 4;
