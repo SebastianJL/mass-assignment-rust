@@ -80,18 +80,44 @@ impl ThreadComm {
         }
         communicators
     }
+
+    /// Blocking barrier for all threads in ThreadComm.
+    ///
+    /// # Returns
+    /// Returns Ok(_) if successful or Err(RecvErr::NoSender) if one of the connections got disconnected.
+    fn barrier(&mut self) -> Result<(), RecvErr> {
+        // Send signal.
+        for receiver in &self.sync_channel.tx {
+            receiver.send(true).unwrap();
+        }
+
+        // Receive signal.
+        for _ in 0..self.size {
+            loop {
+                match self.sync_channel.rx.recv() {
+                    Ok(_msg) => {
+                        break;
+                    }
+                    Err(RecvErr::NoMessage) => {}
+                    Err(RecvErr::NoSender) => return Err(RecvErr::NoSender),
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 fn main() {
     let start = Instant::now();
 
     /// Total number of particles in simulation.
-    const N_PARTICLES: usize = 1<<23;
+    const N_PARTICLES: usize = 1 << 23;
     /// Number of grid cells along one axis for mass grid.
-    const N_GRID: usize = 1<<15; 
+    const N_GRID: usize = 1 << 15;
     /// Size of 2d super cells {N_Cell, N_Cell} on mass grid.
-    const N_CELL: usize = 1<<6;
-    dbg!(N_GRID/N_CELL);
+    const N_CELL: usize = 1 << 6;
+    dbg!(N_GRID / N_CELL);
     /// Number of threads.
     const N_THREADS: usize = 4;
     /// Number of hunks. A hunk is a collection of slabs. I.e a hunk of a 2d grid [N, N] is [HUNK_SIZE, N].
@@ -178,23 +204,7 @@ fn assign_masses<const N_GRID: usize, const N_HUNKS: usize>(
         }
     }
 
-    // Send finished mass assignments.
-    for receiver in &comm.sync_channel.tx {
-        receiver.send(true).unwrap();
-    }
-
-    // Receive mass assignment finished.
-    for _ in 0..comm.size {
-        loop {
-            match comm.sync_channel.rx.recv() {
-                Ok(_msg) => {
-                    break;
-                }
-                Err(RecvErr::NoMessage) => {}
-                Err(RecvErr::NoSender) => panic!("Somehow got disconnected"),
-            }
-        }
-    }
+    comm.barrier().unwrap();
 
     // Process particles sent from other threads.
     while let Ok(grid_indices) = comm.index_channel.rx.recv() {
