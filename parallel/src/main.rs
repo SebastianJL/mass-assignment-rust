@@ -112,15 +112,11 @@ fn main() {
     let start = Instant::now();
 
     /// Total number of particles in simulation.
-    const N_PARTICLES: usize = 1 << 23;
+    const N_PARTICLES: usize = 1024usize.pow(2);
     dbg!(N_PARTICLES);
     /// Number of grid cells along one axis for mass grid.
-    const N_GRID: usize = 1 << 15;
+    const N_GRID: usize = 1024;
     dbg!(N_GRID);
-    /// Size of 2d super cells {N_Cell, N_Cell} on mass grid.
-    const N_CELL: usize = 1 << 6;
-    dbg!(N_CELL);
-    dbg!(N_GRID / N_CELL);
     /// Number of threads.
     const N_THREADS: usize = 4;
     /// Number of hunks. A hunk is a collection of slabs. I.e a hunk of a 2d grid [N, N] is [HUNK_SIZE, N].
@@ -131,12 +127,13 @@ fn main() {
     // Number of slabs per hunk.
     const HUNK_SIZE: usize = get_hunk_size(N_GRID, N_HUNKS);
     let mut communicators = ThreadComm::create_communicators(N_THREADS);
-    let particles = generate_particles::<N_PARTICLES>();
+    let mut particles = generate_particles(N_PARTICLES);
     thread::scope(|s| {
-        for (comm, p_local) in communicators.iter_mut().zip(particles.chunks(CHUNK_SIZE)) {
+        for (comm, p_local) in communicators.iter_mut().zip(particles.chunks_mut(CHUNK_SIZE)) {
             s.spawn(move || {
                 let mut mass_grid = MassGrid::zeros([HUNK_SIZE, N_GRID]);
-                assign_masses::<N_GRID, N_HUNKS>(p_local, &mut mass_grid, comm);
+                p_local.sort_unstable_by(|p1, p2| p1[0].total_cmp(&p2[0]));
+                assign_masses(p_local, &mut mass_grid, N_GRID, N_HUNKS, comm);
 
                 // Calculate local mass sum and send.
                 if comm.rank != 0 {
@@ -159,6 +156,7 @@ fn main() {
                         }
                     }
                     assert_eq!(total_mass as usize, N_PARTICLES);
+                    dbg!(total_mass);
                 }
             });
         }
@@ -170,10 +168,10 @@ fn main() {
 
 /// Generate random particles. Particles are layed out as a simple array with shape (`N_PARTICLES`, DIM)
 /// that describe coordinates of the particle.
-fn generate_particles<const N_PARTICLES: usize>() -> Vec<Particle> {
+fn generate_particles(n_particles: usize) -> Vec<Particle> {
     let mut rng = <StdRng as rand::SeedableRng>::seed_from_u64(42);
     // let mut rng = rand::thread_rng();
-    (0..N_PARTICLES)
+    (0..n_particles)
         .map(|_| {
             [
                 rand::Rng::gen_range(&mut rng, MIN..MAX),
@@ -184,19 +182,25 @@ fn generate_particles<const N_PARTICLES: usize>() -> Vec<Particle> {
 }
 
 /// Assign masses according to nearest grid point algorithm.
-fn assign_masses<const N_GRID: usize, const N_HUNKS: usize>(
+/// 
+/// Expects particles to be sorted along first dimension.
+fn assign_masses(
     particles: &[Particle],
     mass_grid: &mut MassGrid,
+    n_grid: usize,
+    n_hunks: usize,
     comm: &mut ThreadComm,
 ) {
-    let hunk_size = get_hunk_size(N_GRID, N_HUNKS);
+    assert!(is_sorted(particles));
+
+    let hunk_size = get_hunk_size(n_grid, n_hunks);
     // Process particles belonging to own thread and send others to their threads.
     for space_coords in particles.iter() {
         let grid_indices = (
-            grid_index_from_coordinate::<N_GRID>(space_coords[0]).min(N_GRID - 1),
-            grid_index_from_coordinate::<N_GRID>(space_coords[1]).min(N_GRID - 1),
+            grid_index_from_coordinate(space_coords[0], n_grid).min(n_grid - 1),
+            grid_index_from_coordinate(space_coords[1], n_grid).min(n_grid - 1),
         );
-        let hunk_index = hunk_index_from_grid_index::<N_GRID, N_HUNKS>(grid_indices.0);
+        let hunk_index = hunk_index_from_grid_index(grid_indices.0, n_grid, n_hunks);
         if hunk_index == comm.rank {
             let local_grid_indices = (grid_indices.0 - hunk_index * hunk_size, grid_indices.1);
             mass_grid[local_grid_indices] += 1;
@@ -211,10 +215,14 @@ fn assign_masses<const N_GRID: usize, const N_HUNKS: usize>(
 
     // Process particles sent from other threads.
     while let Ok(grid_indices) = comm.index_channel.rx.recv() {
-        let hunk_index = hunk_index_from_grid_index::<N_GRID, N_HUNKS>(grid_indices.0);
+        let hunk_index = hunk_index_from_grid_index(grid_indices.0, n_grid, n_hunks);
         let local_grid_indices = (grid_indices.0 - hunk_index * hunk_size, grid_indices.1);
         mass_grid[local_grid_indices] += 1;
     }
+}
+
+fn is_sorted(particles: &[[f32; 2]]) -> bool {
+    particles.windows(2).all(|w| w[0][0] <= w[1][0])
 }
 
 #[cfg(test)]
@@ -239,7 +247,7 @@ mod test {
         const N_THREADS: usize = 1;
         let mut mass_grid = MassGrid::default([N_GRID; DIM]);
         let mut communicators = ThreadComm::create_communicators(N_THREADS);
-        assign_masses::<N_GRID, N_THREADS>(&particles, &mut mass_grid, &mut communicators[0]);
+        assign_masses(&particles, &mut mass_grid, N_GRID, N_THREADS, &mut communicators[0]);
         let mass_grid_precalculated =
             array![[2, 0, 1, 0], [0, 0, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1],];
         assert_eq!(mass_grid, mass_grid_precalculated);
