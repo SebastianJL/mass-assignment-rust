@@ -18,7 +18,9 @@ fn main() {
         n_particles,
         n_grid,
         n_threads,
+        seed
     } = read_config();
+    dbg!(seed);
     dbg!(n_particles);
     dbg!(n_grid);
     dbg!(n_threads);
@@ -28,7 +30,7 @@ fn main() {
     // Number of slabs per hunk.
     let hunk_size: usize = get_hunk_size(n_grid, n_threads);
     let mut communicators = ThreadComm::create_communicators(n_threads);
-    let mut particles = generate_particles(n_particles);
+    let mut particles = generate_particles(n_particles, seed);
 
     let start = Instant::now();
     thread::scope(|s| {
@@ -74,8 +76,8 @@ fn main() {
 
 /// Generate random particles. Particles are layed out as a simple array with shape (`N_PARTICLES`, DIM)
 /// that describe coordinates of the particle.
-fn generate_particles(n_particles: usize) -> Vec<Particle> {
-    let mut rng = <StdRng as rand::SeedableRng>::seed_from_u64(42);
+fn generate_particles(n_particles: usize, seed: u64) -> Vec<Particle> {
+    let mut rng = <StdRng as rand::SeedableRng>::seed_from_u64(seed);
     // let mut rng = rand::thread_rng();
     (0..n_particles)
         .map(|_| {

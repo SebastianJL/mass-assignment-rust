@@ -7,6 +7,7 @@ pub struct Config {
     pub n_grid: usize,
     /// Number of threads.
     pub n_threads: usize,
+    pub seed: u64,
 }
 
 pub fn read_config() -> Config {
