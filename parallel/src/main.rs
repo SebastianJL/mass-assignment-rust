@@ -14,7 +14,6 @@ use parallel::{coordinates::grid_index_from_coordinate, MAX, MIN};
 use rand::rngs::StdRng;
 
 fn main() {
-    let start = Instant::now();
     let Config {
         n_particles,
         n_grid,
@@ -23,13 +22,15 @@ fn main() {
     dbg!(n_particles);
     dbg!(n_grid);
     dbg!(n_threads);
-
+    
     // Number of particles per thread.
     let chunk_size: usize = get_chunk_size(n_particles, n_threads);
     // Number of slabs per hunk.
     let hunk_size: usize = get_hunk_size(n_grid, n_threads);
     let mut communicators = ThreadComm::create_communicators(n_threads);
     let mut particles = generate_particles(n_particles);
+
+    let start = Instant::now();
     thread::scope(|s| {
         for (comm, p_local) in communicators
             .iter_mut()
