@@ -3,6 +3,7 @@ use ndarray::{Array, Dim, Array1};
 
 pub mod coordinates;
 pub mod thread_comm;
+pub mod config;
 
 /// Choose between f32 and f64 to change precision of floating point numbers.
 pub type Float = f32;

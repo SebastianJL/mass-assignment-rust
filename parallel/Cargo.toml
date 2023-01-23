@@ -6,7 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+config = "0.13.3"
 itertools = "0.10.5"
 lockfree = "0.5.1"
 ndarray = "0.15.6"
 rand = "0.8.5"
+serde = "1.0.152"

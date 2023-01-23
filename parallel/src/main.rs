@@ -6,6 +6,7 @@ use std::time::Instant;
 use itertools::Itertools;
 use lockfree::channel::RecvErr;
 use ndarray::s;
+use parallel::config::{read_config, Config};
 use parallel::{MassGrid, Particle, MassSlab};
 use parallel::coordinates::{get_chunk_size, get_hunk_size, hunk_index_from_grid_index};
 use parallel::thread_comm::ThreadComm;
@@ -14,31 +15,30 @@ use rand::rngs::StdRng;
 
 fn main() {
     let start = Instant::now();
-
-    /// Total number of particles in simulation.
-    const N_PARTICLES: usize = 1024usize.pow(2);
-    dbg!(N_PARTICLES);
-    /// Number of grid cells along one axis for mass grid.
-    const N_GRID: usize = 1024;
-    dbg!(N_GRID);
-    /// Number of threads.
-    const N_THREADS: usize = 4;
+    let Config {
+        n_particles,
+        n_grid,
+        n_threads,
+    } = read_config();
+    dbg!(n_particles);
+    dbg!(n_grid);
+    dbg!(n_threads);
 
     // Number of particles per thread.
-    const CHUNK_SIZE: usize = get_chunk_size(N_PARTICLES, N_THREADS);
+    let chunk_size: usize = get_chunk_size(n_particles, n_threads);
     // Number of slabs per hunk.
-    const HUNK_SIZE: usize = get_hunk_size(N_GRID, N_THREADS);
-    let mut communicators = ThreadComm::create_communicators(N_THREADS);
-    let mut particles = generate_particles(N_PARTICLES);
+    let hunk_size: usize = get_hunk_size(n_grid, n_threads);
+    let mut communicators = ThreadComm::create_communicators(n_threads);
+    let mut particles = generate_particles(n_particles);
     thread::scope(|s| {
         for (comm, p_local) in communicators
             .iter_mut()
-            .zip(particles.chunks_mut(CHUNK_SIZE).chain(once(&mut [][..])))
+            .zip(particles.chunks_mut(chunk_size).chain(once(&mut [][..])))
         {
             s.spawn(move || {
-                let mut mass_grid = MassGrid::zeros([HUNK_SIZE, N_GRID]);
+                let mut mass_grid = MassGrid::zeros([hunk_size, n_grid]);
                 p_local.sort_unstable_by(|p1, p2| p1[0].total_cmp(&p2[0]));
-                assign_masses(p_local, &mut mass_grid, N_GRID, comm);
+                assign_masses(p_local, &mut mass_grid, n_grid, comm);
 
                 // Calculate local mass sum and send.
                 if comm.rank != 0 {
@@ -48,7 +48,7 @@ fn main() {
                 // Receive mass sums and calculate global mass sum.
                 if comm.rank == 0 {
                     let mut total_mass = mass_grid.sum();
-                    for _ in 0..(N_THREADS - 1) {
+                    for _ in 0..(n_threads - 1) {
                         loop {
                             match comm.mass_channel.rx.recv() {
                                 Ok(mass) => {
@@ -60,7 +60,7 @@ fn main() {
                             }
                         }
                     }
-                    assert_eq!(total_mass as usize, N_PARTICLES);
+                    assert_eq!(total_mass as usize, n_particles);
                     dbg!(total_mass);
                 }
             });

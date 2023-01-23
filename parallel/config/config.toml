@@ -1,0 +1,3 @@
+    n_particles = 1048576 #(1024**2)
+    n_grid = 1024
+    n_threads = 3
