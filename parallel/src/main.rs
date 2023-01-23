@@ -1,3 +1,4 @@
+use std::iter::once;
 use std::ops::AddAssign;
 use std::thread;
 use std::time::Instant;
@@ -6,9 +7,7 @@ use itertools::izip;
 use itertools::Itertools;
 use lockfree::channel::mpsc::{Receiver, Sender};
 use lockfree::channel::{mpsc, RecvErr};
-use ndarray::s;
-use ndarray::Array1;
-use ndarray::{Array, Dim};
+use ndarray::{s, Array1, Array, Dim};
 use parallel::coordinates::{get_chunk_size, get_hunk_size, hunk_index_from_grid_index};
 use parallel::{
     coordinates::{grid_index_from_coordinate, GridIndex, SpaceCoordinate},
@@ -125,24 +124,22 @@ fn main() {
     dbg!(N_GRID);
     /// Number of threads.
     const N_THREADS: usize = 4;
-    /// Number of hunks. A hunk is a collection of slabs. I.e a hunk of a 2d grid [N, N] is [HUNK_SIZE, N].
-    const N_HUNKS: usize = N_THREADS;
 
     // Number of particles per thread.
     const CHUNK_SIZE: usize = get_chunk_size(N_PARTICLES, N_THREADS);
     // Number of slabs per hunk.
-    const HUNK_SIZE: usize = get_hunk_size(N_GRID, N_HUNKS);
+    const HUNK_SIZE: usize = get_hunk_size(N_GRID, N_THREADS);
     let mut communicators = ThreadComm::create_communicators(N_THREADS);
     let mut particles = generate_particles(N_PARTICLES);
     thread::scope(|s| {
         for (comm, p_local) in communicators
             .iter_mut()
-            .zip(particles.chunks_mut(CHUNK_SIZE))
+            .zip(particles.chunks_mut(CHUNK_SIZE).chain(once(&mut [][..])))
         {
             s.spawn(move || {
                 let mut mass_grid = MassGrid::zeros([HUNK_SIZE, N_GRID]);
                 p_local.sort_unstable_by(|p1, p2| p1[0].total_cmp(&p2[0]));
-                assign_masses(p_local, &mut mass_grid, N_GRID, N_HUNKS, comm);
+                assign_masses(p_local, &mut mass_grid, N_GRID, comm);
 
                 // Calculate local mass sum and send.
                 if comm.rank != 0 {
@@ -197,7 +194,6 @@ fn assign_masses(
     particles: &[Particle],
     mass_grid: &mut MassGrid,
     n_grid: usize,
-    n_hunks: usize,
     comm: &mut ThreadComm,
 ) {
     assert!(is_sorted(particles));
@@ -207,16 +203,17 @@ fn assign_masses(
     let mut max_grid_idx = 0;
     slab_boundaries.push(0);
     for (i, &[x, _]) in particles.iter().enumerate() {
-        let grid_index = grid_index_from_coordinate(x, n_grid).min(n_grid - 1);
-        if grid_index > max_grid_idx {
-            max_grid_idx = grid_index;
+        let x_grid_index = grid_index_from_coordinate(x, n_grid).min(n_grid - 1);
+        if x_grid_index > max_grid_idx {
+            max_grid_idx = x_grid_index;
             slab_boundaries.push(i);
         }
     }
-    slab_boundaries.push(particles.len());
+    if particles.len() > 0 {
+        slab_boundaries.push(particles.len());
+    }
 
-    let hunk_size = get_hunk_size(n_grid, n_hunks);
-
+    let hunk_size = get_hunk_size(n_grid, comm.size);
     // Process particles slab by slab.
     for (i1, i2) in slab_boundaries.into_iter().tuple_windows() {
         let mut slab = MassSlab::zeros(n_grid);
@@ -225,7 +222,7 @@ fn assign_masses(
             slab[y_grid_index] += 1;
         }
         let slab_index = grid_index_from_coordinate(particles[i1][0], n_grid).min(n_grid - 1);
-        let hunk_index = hunk_index_from_grid_index(slab_index, n_grid, n_hunks);
+        let hunk_index = hunk_index_from_grid_index(slab_index, n_grid, comm.size);
         if hunk_index == comm.rank {
             let local_slab_index = slab_index - hunk_index * hunk_size;
             mass_grid
@@ -242,7 +239,7 @@ fn assign_masses(
 
     // Process particles sent from other threads.
     while let Ok((slab_index, slab)) = comm.slab_channel.rx.recv() {
-        let hunk_index = hunk_index_from_grid_index(slab_index, n_grid, n_hunks);
+        let hunk_index = hunk_index_from_grid_index(slab_index, n_grid, comm.size);
         let local_slab_index = slab_index - hunk_index * hunk_size;
         mass_grid
             .slice_mut(s![local_slab_index, ..])
@@ -256,6 +253,8 @@ fn is_sorted(particles: &[[f32; 2]]) -> bool {
 
 #[cfg(test)]
 mod test {
+
+    use std::{iter::once, vec};
 
     use ndarray::array;
 
@@ -277,13 +276,7 @@ mod test {
         let mut mass_grid = MassGrid::default([N_GRID; DIM]);
         let mut communicators = ThreadComm::create_communicators(N_THREADS);
         particles.sort_unstable_by(|p1, p2| p1[0].total_cmp(&p2[0]));
-        assign_masses(
-            &particles,
-            &mut mass_grid,
-            N_GRID,
-            N_THREADS,
-            &mut communicators[0],
-        );
+        assign_masses(&particles, &mut mass_grid, N_GRID, &mut communicators[0]);
         let mass_grid_precalculated =
             array![[2, 0, 1, 0], [0, 0, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1],];
         assert_eq!(mass_grid, mass_grid_precalculated);
@@ -302,33 +295,32 @@ mod test {
 
         let n_particles = particles.len();
         const N_GRID: usize = 4;
-        const N_THREADS: usize = 4;
-        const N_HUNKS: usize = N_THREADS;
+        let n_threads: usize = 4;
 
         // Number of particles per thread.
-        let chunk_size: usize = get_chunk_size(n_particles, N_THREADS);
+        let chunk_size: usize = get_chunk_size(n_particles, n_threads);
         // Number of slabs per hunk.
-        const HUNK_SIZE: usize = get_hunk_size(N_GRID, N_HUNKS);
-        let mut communicators = ThreadComm::create_communicators(N_THREADS);
+        let hunk_size: usize = get_hunk_size(N_GRID, n_threads);
+        let mut communicators = ThreadComm::create_communicators(n_threads);
+
         thread::scope(|s| {
             for (comm, p_local) in communicators
                 .iter_mut()
-                .zip(particles.chunks_mut(chunk_size))
+                .zip(particles.chunks_mut(chunk_size).chain(once(&mut [][..])))
             {
                 s.spawn(move || {
-                    let mut mass_grid = MassGrid::zeros([HUNK_SIZE, N_GRID]);
+                    let mut mass_grid = MassGrid::zeros([hunk_size, N_GRID]);
                     p_local.sort_unstable_by(|p1, p2| p1[0].total_cmp(&p2[0]));
-                    assign_masses(p_local, &mut mass_grid, N_GRID, N_HUNKS, comm);
+                    assign_masses(p_local, &mut mass_grid, N_GRID, comm);
 
                     let mass_grid_precalculated = match comm.rank {
-                        // array![[2, 0, 1, 0], [0, 0, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1],];
-                        0 => array![2, 0, 1, 0],
-                        1 => array![0, 0, 0, 0],
-                        2 => array![0, 0, 1, 0],
-                        3 => array![0, 0, 0, 1],
-                        _ => panic!("There sholdn't be more then {N_THREADS} threads."),
+                        0 => array![[2, 0, 1, 0]],
+                        1 => array![[0, 0, 0, 0]],
+                        2 => array![[0, 0, 1, 0]],
+                        3 => array![[0, 0, 0, 1]],
+                        _ => panic!("There shouldn't be more then {n_threads} threads."),
                     };
-                    // assert_eq!(mass_grid, mass_grid_precalculated);
+                    assert_eq!(mass_grid, mass_grid_precalculated);
                 });
             }
         });
