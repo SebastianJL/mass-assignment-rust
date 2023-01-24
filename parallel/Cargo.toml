@@ -12,3 +12,9 @@ lockfree = "0.5.1"
 ndarray = "0.15.6"
 rand = "0.8.5"
 serde = "1.0.152"
+dhat = "0.3.2"
+
+
+
+[features]
+dhat-heap = []  # For profiling with dhat.

@@ -3,3 +3,6 @@ members = [
     "parallel",
     "serial",
 ]
+
+[profile.release]
+debug = 1  # For profiling with dhat.

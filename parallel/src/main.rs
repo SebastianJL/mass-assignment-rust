@@ -13,7 +13,14 @@ use parallel::thread_comm::ThreadComm;
 use parallel::{coordinates::grid_index_from_coordinate, MAX, MIN};
 use rand::rngs::StdRng;
 
+#[cfg(feature = "dhat-heap")]
+#[global_allocator]
+static ALLOC: dhat::Alloc = dhat::Alloc;
+
 fn main() {
+    #[cfg(feature = "dhat-heap")]
+    let _profiler = dhat::Profiler::new_heap();
+
     let Config {
         n_particles,
         n_grid,
