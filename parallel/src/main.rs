@@ -7,10 +7,10 @@ use itertools::Itertools;
 use lockfree::channel::RecvErr;
 use ndarray::s;
 use parallel::config::{read_config, Config};
-use parallel::{MassGrid, Particle, MassSlab};
 use parallel::coordinates::{get_chunk_size, get_hunk_size, hunk_index_from_grid_index};
 use parallel::thread_comm::ThreadComm;
 use parallel::{coordinates::grid_index_from_coordinate, MAX, MIN};
+use parallel::{MassGrid, MassSlab, Particle};
 use rand::rngs::StdRng;
 
 #[cfg(feature = "dhat-heap")]
@@ -25,13 +25,13 @@ fn main() {
         n_particles,
         n_grid,
         n_threads,
-        seed
+        seed,
     } = read_config();
     dbg!(seed);
     dbg!(n_particles);
     dbg!(n_grid);
     dbg!(n_threads);
-    
+
     // Number of particles per thread.
     let chunk_size: usize = get_chunk_size(n_particles, n_threads);
     // Number of slabs per hunk.
@@ -141,6 +141,15 @@ fn assign_masses(
             comm.slab_channel.tx[hunk_index]
                 .send((slab_index, slab))
                 .unwrap();
+        }
+
+        // Process particles sent from other threads.
+        while let Ok((slab_index, slab)) = comm.slab_channel.rx.recv() {
+            let hunk_index = hunk_index_from_grid_index(slab_index, n_grid, comm.size);
+            let local_slab_index = slab_index - hunk_index * hunk_size;
+            mass_grid
+                .slice_mut(s![local_slab_index, ..])
+                .add_assign(&slab);
         }
     }
 

@@ -1,4 +1,4 @@
 /target
 /.vscode
 /.idea
-**/dhat-heap.json
+**/dhat-heap.json*
