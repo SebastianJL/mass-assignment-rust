@@ -106,6 +106,7 @@ fn assign_masses(
     comm: &mut ThreadComm,
 ) {
     assert!(is_sorted(particles));
+    const MAX_PARTICLES_PROCESSED: usize = 64;
 
     // Find slab boundaries in sorted particles array.
     let mut slab_boundaries = vec![];
@@ -123,33 +124,41 @@ fn assign_masses(
     }
 
     let hunk_size = get_hunk_size(n_grid, comm.size);
+    // Only allocate slab once per assign_masses() call.
+    let mut local_slab = MassSlab::zeros(n_grid);
     // Process particles slab by slab.
-    for (i1, i2) in slab_boundaries.into_iter().tuple_windows() {
-        let mut slab = MassSlab::zeros(n_grid);
-        for &[_, y] in &particles[i1..i2] {
-            let y_grid_index = grid_index_from_coordinate(y, n_grid).min(n_grid - 1);
-            slab[y_grid_index] += 1;
-        }
-        let slab_index = grid_index_from_coordinate(particles[i1][0], n_grid).min(n_grid - 1);
+    for (slab_min, slab_max) in slab_boundaries.into_iter().tuple_windows() {
+        let slab_index = grid_index_from_coordinate(particles[slab_min][0], n_grid).min(n_grid - 1);
         let hunk_index = hunk_index_from_grid_index(slab_index, n_grid, comm.size);
+        local_slab.fill(0);
+
+        for chunk in particles[slab_min..slab_max].chunks(MAX_PARTICLES_PROCESSED) {
+            // Process particles in chunk.
+            for &[_, y] in chunk {
+                let y_grid_index = grid_index_from_coordinate(y, n_grid).min(n_grid - 1);
+                local_slab[y_grid_index] += 1;
+            }
+
+            // Process particles sent from other threads.
+            while let Ok((slab_index, foreign_slab)) = comm.slab_channel.rx.recv() {
+                let hunk_index = hunk_index_from_grid_index(slab_index, n_grid, comm.size);
+                let local_slab_index = slab_index - hunk_index * hunk_size;
+                mass_grid
+                    .slice_mut(s![local_slab_index, ..])
+                    .add_assign(&foreign_slab);
+            }
+        }
+        
         if hunk_index == comm.rank {
             let local_slab_index = slab_index - hunk_index * hunk_size;
             mass_grid
                 .slice_mut(s![local_slab_index, ..])
-                .add_assign(&slab);
+                .add_assign(&local_slab);
         } else {
+            // Slab has to be cloned here, but doesn't have to be allocated on each iteration.
             comm.slab_channel.tx[hunk_index]
-                .send((slab_index, slab))
+                .send((slab_index, local_slab.clone()))
                 .unwrap();
-        }
-
-        // Process particles sent from other threads.
-        while let Ok((slab_index, slab)) = comm.slab_channel.rx.recv() {
-            let hunk_index = hunk_index_from_grid_index(slab_index, n_grid, comm.size);
-            let local_slab_index = slab_index - hunk_index * hunk_size;
-            mass_grid
-                .slice_mut(s![local_slab_index, ..])
-                .add_assign(&slab);
         }
     }
 
