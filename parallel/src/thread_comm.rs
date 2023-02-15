@@ -2,26 +2,20 @@ use itertools::izip;
 use lockfree::channel::mpsc::{Receiver, Sender};
 use lockfree::channel::{mpsc, RecvErr};
 
-use crate::{MassSlab, MassEntry};
 use crate::coordinates::GridIndex;
+use crate::{MassEntry, MassSlab};
 
 #[derive(Debug)]
-pub struct ThreadComm {
-    pub rank: usize,
-    // Total number of threads.
-    pub size: usize,
-    // Channel for sending a slab of a mass grid.
-    pub slab_channel: SlabChannel,
-    // Channel for gathering total mass in rank 0.
-    pub mass_channel: MassChannel,
-    // Channel for synchronization task.
-    pub sync_channel: SyncChannel,
+pub struct SlabMessage {
+    // Rank of thread that sent the message.
+    pub sent_by: usize,
+    pub slab_index: GridIndex,
+    pub slab: MassSlab,
 }
-
 #[derive(Debug)]
 pub struct SlabChannel {
-    pub rx: Receiver<(GridIndex, MassSlab)>,
-    pub tx: Vec<Sender<(GridIndex, MassSlab)>>,
+    pub rx: Receiver<SlabMessage>,
+    pub tx: Vec<Sender<SlabMessage>>,
 }
 
 #[derive(Debug)]
@@ -36,9 +30,22 @@ pub struct SyncChannel {
     pub tx: Vec<Sender<bool>>,
 }
 
+#[derive(Debug)]
+pub struct ThreadComm {
+    pub rank: usize,
+    // Total number of threads.
+    pub size: usize,
+    // Channel for sending a slab of a mass grid.
+    pub slab_channel: SlabChannel,
+    // Channel for gathering total mass in rank 0.
+    pub mass_channel: MassChannel,
+    // Channel for synchronization task.
+    pub sync_channel: SyncChannel,
+}
+
 impl ThreadComm {
     pub fn create_communicators(number: usize) -> Vec<ThreadComm> {
-        let (slab_sender, index_receivers): (Vec<_>, Vec<_>) =
+        let (slab_senders, slab_receivers): (Vec<_>, Vec<_>) =
             (0..number).map(|_| mpsc::create()).unzip();
         let (mass_senders, mass_receivers): (Vec<_>, Vec<_>) =
             (0..number).map(|_| mpsc::create()).unzip();
@@ -47,14 +54,14 @@ impl ThreadComm {
 
         let mut communicators: Vec<ThreadComm> = vec![];
         for (i, (slab_receiver, mass_receiver, sync_receiver)) in
-            izip!(index_receivers, mass_receivers, sync_receivers).enumerate()
+            izip!(slab_receivers, mass_receivers, sync_receivers).enumerate()
         {
             let comm = ThreadComm {
                 rank: i,
                 size: number,
                 slab_channel: SlabChannel {
                     rx: slab_receiver,
-                    tx: slab_sender.clone(),
+                    tx: slab_senders.clone(),
                 },
                 mass_channel: MassChannel {
                     rx: mass_receiver,
