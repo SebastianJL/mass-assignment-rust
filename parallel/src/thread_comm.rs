@@ -5,13 +5,27 @@ use lockfree::channel::{mpsc, RecvErr};
 use crate::coordinates::GridIndex;
 use crate::{MassEntry, MassSlab};
 
+// #[derive(Debug)]
+// pub struct SlabMessage {
+//     // Rank of thread that sent the message.
+//     pub sent_by: usize,
+//     pub slab_index: GridIndex,
+//     pub slab: MassSlab,
+// }
+
 #[derive(Debug)]
-pub struct SlabMessage {
-    // Rank of thread that sent the message.
-    pub sent_by: usize,
-    pub slab_index: GridIndex,
-    pub slab: MassSlab,
+pub enum SlabMessage {
+    Msg {
+        // Rank of thread that sent the message.
+        sent_by: usize,
+        slab_index: GridIndex,
+        slab: MassSlab,
+    },
+    Ack {
+        slab: MassSlab,
+    },
 }
+
 #[derive(Debug)]
 pub struct SlabChannel {
     pub rx: Receiver<SlabMessage>,

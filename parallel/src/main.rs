@@ -1,7 +1,7 @@
 use std::iter::once;
 use std::ops::AddAssign;
 use std::thread;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use itertools::Itertools;
 use lockfree::channel::RecvErr;
@@ -106,8 +106,8 @@ fn assign_masses(
     comm: &mut ThreadComm,
 ) {
     assert!(is_sorted(particles));
-    const MAX_PARTICLES_PROCESSED: usize = 64;
-    const MAX_BUFFERS: usize = 4;
+    const MAX_PARTICLES_PROCESSED: usize = 1024;
+    const MAX_BUFFERS: usize = 8;
 
     // Find slab boundaries in sorted particles array.
     let mut slab_boundaries = vec![];
@@ -125,23 +125,26 @@ fn assign_masses(
     }
 
     let hunk_size = get_hunk_size(n_grid, comm.size);
-    let mut slab_buffers = vec![vec![MassSlab::zeros(n_grid); MAX_BUFFERS]; comm.size];
+    let mut slab_buffers = vec![MassSlab::zeros(n_grid); MAX_BUFFERS];
 
     // Process particles slab by slab.
     for (slab_min, slab_max) in slab_boundaries.into_iter().tuple_windows() {
         let slab_index = grid_index_from_coordinate(particles[slab_min][0], n_grid).min(n_grid - 1);
         let hunk_index = hunk_index_from_grid_index(slab_index, n_grid, comm.size);
 
+        let mut i = 0;
         let mut local_slab = loop {
-            match slab_buffers[hunk_index].pop() {
+            match slab_buffers.pop() {
                 Some(slab) => break slab,
-                None => process_received_slabs(
-                    &mut slab_buffers,
-                    mass_grid,
-                    n_grid,
-                    hunk_size,
-                    comm,
-                ),
+                None => {
+                    // thread::sleep(Duration::from_millis(2));
+                    // i += 1;
+                    // if i > 10_000 {
+                    //     i = 0;
+                    //     dbg!(comm.rank);
+                    // };
+                    process_received_slabs(&mut slab_buffers, mass_grid, n_grid, hunk_size, true, comm)
+                }
             }
         };
         local_slab.fill(0);
@@ -154,21 +157,21 @@ fn assign_masses(
                 local_slab[y_grid_index] += 1;
             }
 
-            process_received_slabs(&mut slab_buffers, mass_grid, n_grid, hunk_size, comm)
+            // process_received_slabs(&mut slab_buffers, mass_grid, n_grid, hunk_size, false, comm)
         }
 
-        // Keep local.
+        // Keep if local.
         if hunk_index == comm.rank {
             let local_slab_index = slab_index - hunk_index * hunk_size;
             mass_grid
                 .slice_mut(s![local_slab_index, ..])
                 .add_assign(&local_slab);
             // Put the buffer back to be used in the next iteration.
-            slab_buffers[comm.rank].push(local_slab);
-        // Send foreign.
+            slab_buffers.push(local_slab);
+        // Send if foreign.
         } else {
             comm.slab_channel.tx[hunk_index]
-                .send(SlabMessage {
+                .send(SlabMessage::Msg {
                     sent_by: comm.rank,
                     slab_index,
                     slab: local_slab,
@@ -176,32 +179,45 @@ fn assign_masses(
                 .unwrap();
         }
     }
+    process_received_slabs(&mut slab_buffers, mass_grid, n_grid, hunk_size, false, comm);
 
+    println!("{} done", comm.rank);
     comm.barrier().unwrap();
 
-    process_received_slabs(&mut slab_buffers, mass_grid, n_grid, hunk_size, comm)
+    process_received_slabs(&mut slab_buffers, mass_grid, n_grid, hunk_size, false, comm);
 }
 
 fn process_received_slabs(
-    local_buffers: &mut Vec<Vec<MassSlab>>,
+    local_buffers: &mut Vec<MassSlab>,
     mass_grid: &mut MassGrid,
     n_grid: usize,
     hunk_size: usize,
+    break_early: bool,
     comm: &mut ThreadComm,
 ) {
-    // Process particles sent from other threads.
-    while let Ok(SlabMessage {
-        sent_by: rank,
-        slab_index,
-        slab: foreign_slab,
-    }) = comm.slab_channel.rx.recv()
-    {
-        let hunk_index = hunk_index_from_grid_index(slab_index, n_grid, comm.size);
-        let local_slab_index = slab_index - hunk_index * hunk_size;
-        mass_grid
-            .slice_mut(s![local_slab_index, ..])
-            .add_assign(&foreign_slab);
-        local_buffers[rank].push(foreign_slab);
+    while let Ok(msg) = comm.slab_channel.rx.recv() {
+        match msg {
+            SlabMessage::Msg {
+                sent_by,
+                slab_index,
+                slab: foreign_slab,
+            } => {
+                let hunk_index = hunk_index_from_grid_index(slab_index, n_grid, comm.size);
+                let local_slab_index = slab_index - hunk_index * hunk_size;
+                mass_grid
+                    .slice_mut(s![local_slab_index, ..])
+                    .add_assign(&foreign_slab);
+                comm.slab_channel.tx[sent_by]
+                    .send(SlabMessage::Ack { slab: foreign_slab })
+                    .expect("Rank {rank} disconnected");
+            }
+            SlabMessage::Ack { slab } => {
+                local_buffers.push(slab);
+                if break_early {
+                    break;
+                };
+            }
+        }
     }
 }
 
