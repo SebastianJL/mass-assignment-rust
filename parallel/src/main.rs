@@ -1,7 +1,7 @@
 use std::iter::once;
 use std::ops::AddAssign;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use itertools::Itertools;
 use lockfree::channel::RecvErr;
@@ -107,7 +107,7 @@ fn assign_masses(
 ) {
     assert!(is_sorted(particles));
     const MAX_PARTICLES_PROCESSED: usize = 1024;
-    const MAX_BUFFERS: usize = 8;
+    const MAX_BUFFERS: usize = 4;
 
     // Find slab boundaries in sorted particles array.
     let mut slab_boundaries = vec![];
@@ -120,7 +120,7 @@ fn assign_masses(
             slab_boundaries.push(i);
         }
     }
-    if particles.len() > 0 {
+    if !particles.is_empty() {
         slab_boundaries.push(particles.len());
     }
 
@@ -132,19 +132,17 @@ fn assign_masses(
         let slab_index = grid_index_from_coordinate(particles[slab_min][0], n_grid).min(n_grid - 1);
         let hunk_index = hunk_index_from_grid_index(slab_index, n_grid, comm.size);
 
-        let mut i = 0;
         let mut local_slab = loop {
             match slab_buffers.pop() {
                 Some(slab) => break slab,
-                None => {
-                    // thread::sleep(Duration::from_millis(2));
-                    // i += 1;
-                    // if i > 10_000 {
-                    //     i = 0;
-                    //     dbg!(comm.rank);
-                    // };
-                    process_received_slabs(&mut slab_buffers, mass_grid, n_grid, hunk_size, true, comm)
-                }
+                None => process_received_slabs(
+                    &mut slab_buffers,
+                    mass_grid,
+                    n_grid,
+                    hunk_size,
+                    true,
+                    comm,
+                ),
             }
         };
         local_slab.fill(0);
@@ -157,7 +155,7 @@ fn assign_masses(
                 local_slab[y_grid_index] += 1;
             }
 
-            // process_received_slabs(&mut slab_buffers, mass_grid, n_grid, hunk_size, false, comm)
+            process_received_slabs(&mut slab_buffers, mass_grid, n_grid, hunk_size, false, comm)
         }
 
         // Keep if local.
@@ -179,9 +177,8 @@ fn assign_masses(
                 .unwrap();
         }
     }
-    process_received_slabs(&mut slab_buffers, mass_grid, n_grid, hunk_size, false, comm);
 
-    println!("{} done", comm.rank);
+    println!("{} done assigning own particles", comm.rank);
     // Synchronize threads.
     {
         // Send signal.
