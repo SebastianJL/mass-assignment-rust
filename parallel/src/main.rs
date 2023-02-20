@@ -182,9 +182,30 @@ fn assign_masses(
     process_received_slabs(&mut slab_buffers, mass_grid, n_grid, hunk_size, false, comm);
 
     println!("{} done", comm.rank);
-    comm.barrier().unwrap();
+    // Synchronize threads.
+    {
+        // Send signal.
+        for receiver in &comm.sync_channel.tx {
+            receiver.send(true).unwrap();
+        }
 
-    process_received_slabs(&mut slab_buffers, mass_grid, n_grid, hunk_size, false, comm);
+        // Receive signal.
+        for _ in 0..comm.size {
+            loop {
+                // Wait for sync messages.
+                match comm.sync_channel.rx.recv() {
+                    Ok(_msg) => {
+                        break;
+                    }
+                    Err(RecvErr::NoMessage) => {}
+                    Err(RecvErr::NoSender) => panic!("Unexpected disconnect"),
+                }
+
+                // Process incoming slabs.
+                process_received_slabs(&mut slab_buffers, mass_grid, n_grid, hunk_size, false, comm)
+            }
+        }
+    }
 }
 
 fn process_received_slabs(
