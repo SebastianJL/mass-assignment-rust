@@ -2,3 +2,4 @@
 /.vscode
 /.idea
 config/config.toml
+run*
