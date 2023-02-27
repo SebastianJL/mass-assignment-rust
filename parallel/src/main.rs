@@ -12,6 +12,7 @@ use parallel::thread_comm::{SlabMessage, ThreadComm};
 use parallel::{coordinates::grid_index_from_coordinate, MAX, MIN};
 use parallel::{MassGrid, MassSlab, Particle};
 use rand::rngs::StdRng;
+use rayon::prelude::*;
 
 #[cfg(feature = "dhat-heap")]
 #[global_allocator]
@@ -38,6 +39,7 @@ fn main() {
     let hunk_size: usize = get_hunk_size(n_grid, n_threads);
     let mut communicators = ThreadComm::create_communicators(n_threads);
     let mut particles = generate_particles(n_particles, seed);
+    particles.par_sort_unstable_by(|p1, p2| p1[0].total_cmp(&p2[0]));
 
     let start = Instant::now();
     thread::scope(|s| {
@@ -47,7 +49,7 @@ fn main() {
         {
             s.spawn(move || {
                 let mut mass_grid = MassGrid::zeros([hunk_size, n_grid]);
-                p_local.sort_unstable_by(|p1, p2| p1[0].total_cmp(&p2[0]));
+                // p_local.sort_unstable_by(|p1, p2| p1[0].total_cmp(&p2[0]));
                 assign_masses(p_local, &mut mass_grid, n_grid, comm);
 
                 // Calculate local mass sum and send.
