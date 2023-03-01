@@ -307,7 +307,8 @@ mod test {
                     let mut mass_grid = MassGrid::zeros([hunk_size, N_GRID]);
                     p_local.sort_unstable_by(|p1, p2| p1[0].total_cmp(&p2[0]));
                     assign_masses(p_local, &mut mass_grid, N_GRID, comm);
-
+                    
+                    println!("rank {}, mass_grid = {}", comm.rank, &mass_grid);
                     let mass_grid_precalculated = match comm.rank {
                         0 => array![[2, 0, 1, 0]],
                         1 => array![[0, 0, 0, 0]],
@@ -315,7 +316,7 @@ mod test {
                         3 => array![[0, 0, 0, 1]],
                         _ => panic!("There shouldn't be more then {n_threads} threads."),
                     };
-                    assert_eq!(mass_grid, mass_grid_precalculated);
+                    assert_eq!(mass_grid, mass_grid_precalculated, "offending thread: {}", comm.rank);
                 });
             }
         });
