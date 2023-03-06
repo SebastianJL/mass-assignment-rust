@@ -180,15 +180,20 @@ fn assign_masses(
         }
     }
 
-    println!("{} done assigning own particles", comm.rank);
     // Synchronize threads.
     {
-        // Send signal.
+        // Make sure I get all my buffers back before sending "finished" signal.
+        // This makes sure that no other thread gets my "finished" signal while it's still processing buffers sent by me.
+        while slab_buffers.len() < MAX_BUFFERS {
+            process_received_slabs(&mut slab_buffers, mass_grid, n_grid, hunk_size, false, comm);
+        }
+
+        // Send "finished" signal.
         for receiver in &comm.sync_channel.tx {
             receiver.send(true).unwrap();
         }
 
-        // Receive signal.
+        // Receive "finished" signal and process incoming buffers.
         for _ in 0..comm.size {
             loop {
                 // Wait for sync messages.
@@ -201,7 +206,7 @@ fn assign_masses(
                 }
 
                 // Process incoming slabs.
-                process_received_slabs(&mut slab_buffers, mass_grid, n_grid, hunk_size, false, comm)
+                process_received_slabs(&mut slab_buffers, mass_grid, n_grid, hunk_size, false, comm);
             }
         }
     }
