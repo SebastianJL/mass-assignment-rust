@@ -6,13 +6,14 @@ use std::time::Instant;
 use itertools::Itertools;
 use lockfree::channel::RecvErr;
 use ndarray::s;
+use rand::rngs::StdRng;
+use rayon::prelude::*;
+
 use parallel::config::{read_config, Config};
 use parallel::coordinates::{get_chunk_size, get_hunk_size, hunk_index_from_grid_index};
 use parallel::thread_comm::{SlabMessage, ThreadComm};
 use parallel::{coordinates::grid_index_from_coordinate, MAX, MIN};
 use parallel::{MassGrid, MassSlab, Particle};
-use rand::rngs::StdRng;
-use rayon::prelude::*;
 
 #[cfg(feature = "dhat-heap")]
 #[global_allocator]
@@ -40,7 +41,7 @@ fn main() {
     let mut communicators = ThreadComm::create_communicators(n_threads);
     let mut particles = generate_particles(n_particles, seed);
     particles.par_sort_unstable_by(|p1, p2| p1[0].total_cmp(&p2[0]));
-
+    dbg!("Done sorting");
     let start = Instant::now();
     thread::scope(|s| {
         for (comm, p_local) in communicators
@@ -134,25 +135,25 @@ fn assign_masses(
     for &[x, y] in particles {
         let pencil_index = grid_index_from_coordinate(x, n_grid).min(n_grid - 1);
         if pencil_index > i {
-            dbg!(pencil_index);
-            let hunk_index = hunk_index_from_grid_index(pencil_index, n_grid, comm.size);
+            i = pencil_index;
 
             // Flush
             {
+                let hunk_index = hunk_index_from_grid_index(i, n_grid, comm.size);
                 // Keep if local.
                 if hunk_index == comm.rank {
-                    let local_pencil_index = pencil_index - hunk_index * hunk_size;
+                    let local_pencil_index = i - hunk_index * hunk_size;
                     mass_grid
                         .slice_mut(s![local_pencil_index, ..])
                         .add_assign(&buffer);
                     // Put the buffer back to be used in the next iteration.
                     buffers.push(buffer);
-                    // Send if foreign.
+                // Send if foreign.
                 } else {
                     comm.slab_channel.tx[hunk_index]
                         .send(SlabMessage::Msg {
                             sent_by: comm.rank,
-                            pencil_index,
+                            pencil_index: i,
                             slab: buffer,
                         })
                         .unwrap();
@@ -161,7 +162,6 @@ fn assign_masses(
 
             // Get new buffer
             {
-                i = pencil_index;
                 buffer = loop {
                     match buffers.pop() {
                         Some(slab) => break slab,
@@ -184,7 +184,29 @@ fn assign_masses(
 
         process_received_buffers(&mut buffers, mass_grid, n_grid, hunk_size, false, comm)
     }
-
+    // Flush
+    {
+        let hunk_index = hunk_index_from_grid_index(i, n_grid, comm.size);
+        // Keep if local.
+        if hunk_index == comm.rank {
+            let local_pencil_index = i - hunk_index * hunk_size;
+            mass_grid
+                .slice_mut(s![local_pencil_index, ..])
+                .add_assign(&buffer);
+            // Put the buffer back to be used in the next iteration.
+            buffers.push(buffer);
+        // Send if foreign.
+        } else {
+            comm.slab_channel.tx[hunk_index]
+                .send(SlabMessage::Msg {
+                    sent_by: comm.rank,
+                    pencil_index: i,
+                    slab: buffer,
+                })
+                .unwrap();
+        }
+    }
+    println!("Rank {} done", comm.rank);
     // Synchronize threads.
     {
         // Make sure I get all my buffers back before sending "finished" signal.
@@ -257,10 +279,10 @@ fn is_sorted(particles: &[[f32; 2]]) -> bool {
 
 #[cfg(test)]
 mod test {
-
     use std::{iter::once, vec};
 
     use ndarray::array;
+
     use parallel::DIM;
 
     use super::*;
