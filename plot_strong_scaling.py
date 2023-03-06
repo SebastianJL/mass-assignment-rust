@@ -17,6 +17,10 @@ def init_argparse() -> argparse.ArgumentParser:
         "-s", "--save", action="store_true",
         help="Save figures", default=False,
     )
+    parser.add_argument(
+        "-t", "--title", action="store",
+        help="Set title of figure", default="",
+    )
     parser.add_argument('files', nargs='+')
     return parser
 
@@ -54,12 +58,19 @@ def main() -> None:
     args = parser.parse_args()
     for file in args.files:
         data = parse_data(file)
-        print(data)
-        print(data.dtypes)
+        # print(data)
+        # print(data.dtypes)
 
-        fig = plt.subplots(1)
+        fig, ax = plt.subplots(1)
+        ax.plot(data['n_threads'], data['runtime'][0] / data['runtime'], 'o', label="measured")
+        ax.plot(data['n_threads'], data['n_threads'], label='ideal')
+        ax.set_xlabel('# threads')
+        ax.set_ylabel('speedup')
+        ax.title.set_text('strong scaling')
+        fig.suptitle(args.title)
+        ax.legend()
         if args.save:
-            fig.save(f"{file}_plot.svg")
+            fig.savefig(f"{file}_plot.svg")
 
     if args.show:
         plt.show()
