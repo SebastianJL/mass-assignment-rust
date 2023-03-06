@@ -112,21 +112,6 @@ fn assign_masses(
     const MAX_PARTICLES_PROCESSED: usize = 1024;
     const MAX_BUFFERS: usize = 4;
 
-    // // Find slab boundaries in sorted particles array.
-    // let mut slab_boundaries = vec![];
-    // let mut max_grid_idx = 0;
-    // slab_boundaries.push(0);
-    // for (i, &[x, _]) in particles.iter().enumerate() {
-    //     let x_grid_index = grid_index_from_coordinate(x, n_grid).min(n_grid - 1);
-    //     if x_grid_index > max_grid_idx {
-    //         max_grid_idx = x_grid_index;
-    //         slab_boundaries.push(i);
-    //     }
-    // }
-    // if !particles.is_empty() {
-    //     slab_boundaries.push(particles.len());
-    // }
-
     let hunk_size = get_hunk_size(n_grid, comm.size);
     let mut buffers = vec![MassSlab::zeros(n_grid); MAX_BUFFERS];
 
