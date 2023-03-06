@@ -111,81 +111,86 @@ fn assign_masses(
     const MAX_PARTICLES_PROCESSED: usize = 1024;
     const MAX_BUFFERS: usize = 4;
 
-    // Find slab boundaries in sorted particles array.
-    let mut slab_boundaries = vec![];
-    let mut max_grid_idx = 0;
-    slab_boundaries.push(0);
-    for (i, &[x, _]) in particles.iter().enumerate() {
-        let x_grid_index = grid_index_from_coordinate(x, n_grid).min(n_grid - 1);
-        if x_grid_index > max_grid_idx {
-            max_grid_idx = x_grid_index;
-            slab_boundaries.push(i);
-        }
-    }
-    if !particles.is_empty() {
-        slab_boundaries.push(particles.len());
-    }
+    // // Find slab boundaries in sorted particles array.
+    // let mut slab_boundaries = vec![];
+    // let mut max_grid_idx = 0;
+    // slab_boundaries.push(0);
+    // for (i, &[x, _]) in particles.iter().enumerate() {
+    //     let x_grid_index = grid_index_from_coordinate(x, n_grid).min(n_grid - 1);
+    //     if x_grid_index > max_grid_idx {
+    //         max_grid_idx = x_grid_index;
+    //         slab_boundaries.push(i);
+    //     }
+    // }
+    // if !particles.is_empty() {
+    //     slab_boundaries.push(particles.len());
+    // }
 
     let hunk_size = get_hunk_size(n_grid, comm.size);
-    let mut slab_buffers = vec![MassSlab::zeros(n_grid); MAX_BUFFERS];
+    let mut buffers = vec![MassSlab::zeros(n_grid); MAX_BUFFERS];
 
-    // Process particles slab by slab.
-    for (slab_min, slab_max) in slab_boundaries.into_iter().tuple_windows() {
-        let slab_index = grid_index_from_coordinate(particles[slab_min][0], n_grid).min(n_grid - 1);
-        let hunk_index = hunk_index_from_grid_index(slab_index, n_grid, comm.size);
+    let mut i = grid_index_from_coordinate(particles[0][0], n_grid).min(n_grid - 1);
+    let mut buffer = buffers.pop().unwrap();
+    for &[x, y] in particles {
+        let pencil_index = grid_index_from_coordinate(x, n_grid).min(n_grid - 1);
+        if pencil_index > i {
+            dbg!(pencil_index);
+            let hunk_index = hunk_index_from_grid_index(pencil_index, n_grid, comm.size);
 
-        let mut local_slab = loop {
-            match slab_buffers.pop() {
-                Some(slab) => break slab,
-                None => process_received_buffers(
-                    &mut slab_buffers,
-                    mass_grid,
-                    n_grid,
-                    hunk_size,
-                    true,
-                    comm,
-                ),
+            // Flush
+            {
+                // Keep if local.
+                if hunk_index == comm.rank {
+                    let local_pencil_index = pencil_index - hunk_index * hunk_size;
+                    mass_grid
+                        .slice_mut(s![local_pencil_index, ..])
+                        .add_assign(&buffer);
+                    // Put the buffer back to be used in the next iteration.
+                    buffers.push(buffer);
+                    // Send if foreign.
+                } else {
+                    comm.slab_channel.tx[hunk_index]
+                        .send(SlabMessage::Msg {
+                            sent_by: comm.rank,
+                            pencil_index,
+                            slab: buffer,
+                        })
+                        .unwrap();
+                }
             }
-        };
-        local_slab.fill(0);
 
-        // Process particles in slab by chunks.
-        for chunk in particles[slab_min..slab_max].chunks(MAX_PARTICLES_PROCESSED) {
-            // Process particles in chunk.
-            for &[_, y] in chunk {
-                let y_grid_index = grid_index_from_coordinate(y, n_grid).min(n_grid - 1);
-                local_slab[y_grid_index] += 1;
+            // Get new buffer
+            {
+                i = pencil_index;
+                buffer = loop {
+                    match buffers.pop() {
+                        Some(slab) => break slab,
+                        None => process_received_buffers(
+                            &mut buffers,
+                            mass_grid,
+                            n_grid,
+                            hunk_size,
+                            true,
+                            comm,
+                        ),
+                    }
+                };
+                buffer.fill(0);
             }
-
-            process_received_buffers(&mut slab_buffers, mass_grid, n_grid, hunk_size, false, comm)
         }
 
-        // Keep if local.
-        if hunk_index == comm.rank {
-            let local_slab_index = slab_index - hunk_index * hunk_size;
-            mass_grid
-                .slice_mut(s![local_slab_index, ..])
-                .add_assign(&local_slab);
-            // Put the buffer back to be used in the next iteration.
-            slab_buffers.push(local_slab);
-        // Send if foreign.
-        } else {
-            comm.slab_channel.tx[hunk_index]
-                .send(SlabMessage::Msg {
-                    sent_by: comm.rank,
-                    slab_index,
-                    slab: local_slab,
-                })
-                .unwrap();
-        }
+        let y_grid_index = grid_index_from_coordinate(y, n_grid).min(n_grid - 1);
+        buffer[y_grid_index] += 1;
+
+        process_received_buffers(&mut buffers, mass_grid, n_grid, hunk_size, false, comm)
     }
 
     // Synchronize threads.
     {
         // Make sure I get all my buffers back before sending "finished" signal.
         // This makes sure that no other thread gets my "finished" signal while it's still processing buffers sent by me.
-        while slab_buffers.len() < MAX_BUFFERS {
-            process_received_buffers(&mut slab_buffers, mass_grid, n_grid, hunk_size, false, comm);
+        while buffers.len() < MAX_BUFFERS {
+            process_received_buffers(&mut buffers, mass_grid, n_grid, hunk_size, false, comm);
         }
 
         // Send "finished" signal.
@@ -206,7 +211,7 @@ fn assign_masses(
                 }
 
                 // Process incoming slabs.
-                process_received_buffers(&mut slab_buffers, mass_grid, n_grid, hunk_size, false, comm);
+                process_received_buffers(&mut buffers, mass_grid, n_grid, hunk_size, false, comm);
             }
         }
     }
@@ -224,7 +229,7 @@ fn process_received_buffers(
         match msg {
             SlabMessage::Msg {
                 sent_by,
-                slab_index,
+                pencil_index: slab_index,
                 slab: foreign_slab,
             } => {
                 let hunk_index = hunk_index_from_grid_index(slab_index, n_grid, comm.size);
@@ -312,7 +317,7 @@ mod test {
                     let mut mass_grid = MassGrid::zeros([hunk_size, N_GRID]);
                     p_local.sort_unstable_by(|p1, p2| p1[0].total_cmp(&p2[0]));
                     assign_masses(p_local, &mut mass_grid, N_GRID, comm);
-                    
+
                     println!("rank {}, mass_grid = {}", comm.rank, &mass_grid);
                     let mass_grid_precalculated = match comm.rank {
                         0 => array![[2, 0, 1, 0]],
@@ -321,7 +326,11 @@ mod test {
                         3 => array![[0, 0, 0, 1]],
                         _ => panic!("There shouldn't be more then {n_threads} threads."),
                     };
-                    assert_eq!(mass_grid, mass_grid_precalculated, "offending thread: {}", comm.rank);
+                    assert_eq!(
+                        mass_grid, mass_grid_precalculated,
+                        "offending thread: {}",
+                        comm.rank
+                    );
                 });
             }
         });

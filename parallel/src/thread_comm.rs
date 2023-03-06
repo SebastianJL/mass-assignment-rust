@@ -18,7 +18,7 @@ pub enum SlabMessage {
     Msg {
         // Rank of thread that sent the message.
         sent_by: usize,
-        slab_index: GridIndex,
+        pencil_index: GridIndex,
         slab: MassSlab,
     },
     Ack {
