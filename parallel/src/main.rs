@@ -137,7 +137,7 @@ fn assign_masses(
         let mut local_slab = loop {
             match slab_buffers.pop() {
                 Some(slab) => break slab,
-                None => process_received_slabs(
+                None => process_received_buffers(
                     &mut slab_buffers,
                     mass_grid,
                     n_grid,
@@ -157,7 +157,7 @@ fn assign_masses(
                 local_slab[y_grid_index] += 1;
             }
 
-            process_received_slabs(&mut slab_buffers, mass_grid, n_grid, hunk_size, false, comm)
+            process_received_buffers(&mut slab_buffers, mass_grid, n_grid, hunk_size, false, comm)
         }
 
         // Keep if local.
@@ -185,7 +185,7 @@ fn assign_masses(
         // Make sure I get all my buffers back before sending "finished" signal.
         // This makes sure that no other thread gets my "finished" signal while it's still processing buffers sent by me.
         while slab_buffers.len() < MAX_BUFFERS {
-            process_received_slabs(&mut slab_buffers, mass_grid, n_grid, hunk_size, false, comm);
+            process_received_buffers(&mut slab_buffers, mass_grid, n_grid, hunk_size, false, comm);
         }
 
         // Send "finished" signal.
@@ -206,13 +206,13 @@ fn assign_masses(
                 }
 
                 // Process incoming slabs.
-                process_received_slabs(&mut slab_buffers, mass_grid, n_grid, hunk_size, false, comm);
+                process_received_buffers(&mut slab_buffers, mass_grid, n_grid, hunk_size, false, comm);
             }
         }
     }
 }
 
-fn process_received_slabs(
+fn process_received_buffers(
     local_buffers: &mut Vec<MassSlab>,
     mass_grid: &mut MassGrid,
     n_grid: usize,
