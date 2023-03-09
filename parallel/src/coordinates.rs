@@ -12,7 +12,7 @@ pub type CellIndex = usize;
 /// Return nearest grid point to `coord` of grid with size `N_GRID`.
 ///
 /// Global constants [MIN], [MAX] are the extremes of the spacial coordinates.
-/// 
+///
 /// # WARNING
 /// This doesn't guarantee that the `result < N_GRID` for `coord <` [MAX].
 /// So if you need that you need to take the appropriate measures on the result.
