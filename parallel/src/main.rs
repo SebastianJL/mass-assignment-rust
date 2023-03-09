@@ -3,14 +3,13 @@ use std::ops::AddAssign;
 use std::thread;
 use std::time::Instant;
 
-use itertools::Itertools;
 use lockfree::channel::RecvErr;
 use ndarray::s;
 use rand::rngs::StdRng;
 use rayon::prelude::*;
 
 use parallel::config::{read_config, Config};
-use parallel::coordinates::{get_chunk_size, get_hunk_size, hunk_index_from_grid_index};
+use parallel::coordinates::{get_chunk_size, get_hunk_size, hunk_index_from_grid_index, GridIndex};
 use parallel::thread_comm::{SlabMessage, ThreadComm};
 use parallel::{coordinates::grid_index_from_coordinate, MAX, MIN};
 use parallel::{MassGrid, MassSlab, Particle};
@@ -40,8 +39,13 @@ fn main() {
     let hunk_size: usize = get_hunk_size(n_grid, n_threads);
     let mut communicators = ThreadComm::create_communicators(n_threads);
     let mut particles = generate_particles(n_particles, seed);
-    particles.par_sort_unstable_by(|p1, p2| p1[0].total_cmp(&p2[0]));
-    dbg!("Done sorting");
+
+    particles.par_sort_unstable_by_key(|p| {
+        let i = grid_index_from_coordinate(p[0], n_grid).min(n_grid - 1);
+        let j = grid_index_from_coordinate(p[1], n_grid).min(n_grid - 1);
+        (i, j)
+    });
+
     let start = Instant::now();
     thread::scope(|s| {
         for (comm, p_local) in communicators
@@ -108,8 +112,6 @@ fn assign_masses(
     n_grid: usize,
     comm: &mut ThreadComm,
 ) {
-    assert!(is_sorted(particles));
-    const MAX_PARTICLES_PROCESSED: usize = 1024;
     const MAX_BUFFERS: usize = 4;
 
     let hunk_size = get_hunk_size(n_grid, comm.size);
@@ -118,9 +120,10 @@ fn assign_masses(
     let mut i = grid_index_from_coordinate(particles[0][0], n_grid).min(n_grid - 1);
     let mut buffer = buffers.pop().unwrap();
     for &[x, y] in particles {
-        let pencil_index = grid_index_from_coordinate(x, n_grid).min(n_grid - 1);
-        if pencil_index > i {
-            i = pencil_index;
+        let new_i = grid_index_from_coordinate(x, n_grid).min(n_grid - 1);
+        let j = grid_index_from_coordinate(y, n_grid).min(n_grid - 1);
+        if new_i > i {
+            i = new_i;
 
             // Flush
             {
@@ -164,8 +167,8 @@ fn assign_masses(
             }
         }
 
-        let y_grid_index = grid_index_from_coordinate(y, n_grid).min(n_grid - 1);
-        buffer[y_grid_index] += 1;
+        let mass = 1;
+        buffer[j] += mass;
 
         process_received_buffers(&mut buffers, mass_grid, n_grid, hunk_size, false, comm)
     }
@@ -256,10 +259,6 @@ fn process_received_buffers(
             }
         }
     }
-}
-
-fn is_sorted(particles: &[[f32; 2]]) -> bool {
-    particles.windows(2).all(|w| w[0][0] <= w[1][0])
 }
 
 #[cfg(test)]
