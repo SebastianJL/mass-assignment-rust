@@ -37,7 +37,10 @@ def parse_data(file):
                 next(line_iter)
             except StopIteration:
                 break
-            row = [line.split(f"{column} = ")[1].strip() for column, line in zip(columns, line_iter)]
+            row = []
+            for column, line in zip(columns, line_iter):
+                print(line)
+                row.append(line.split(f"{column} = ")[1].strip())
             data.append(row)
     df = pd.DataFrame(data, columns=columns)
 
