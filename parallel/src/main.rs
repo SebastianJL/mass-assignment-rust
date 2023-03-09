@@ -125,28 +125,7 @@ fn assign_masses(
         if new_i > i {
             i = new_i;
 
-            // Flush
-            {
-                let hunk_index = hunk_index_from_grid_index(i, n_grid, comm.size);
-                // Keep if local.
-                if hunk_index == comm.rank {
-                    let local_pencil_index = i - hunk_index * hunk_size;
-                    mass_grid
-                        .slice_mut(s![local_pencil_index, ..])
-                        .add_assign(&buffer);
-                    // Put the buffer back to be used in the next iteration.
-                    buffers.push(buffer);
-                // Send if foreign.
-                } else {
-                    comm.slab_channel.tx[hunk_index]
-                        .send(SlabMessage::Msg {
-                            sent_by: comm.rank,
-                            pencil_index: i,
-                            slab: buffer,
-                        })
-                        .unwrap();
-                }
-            }
+            flush_or_assign(buffer, &mut buffers, i, mass_grid, n_grid, hunk_size, comm);
 
             // Get new buffer
             {
@@ -172,29 +151,8 @@ fn assign_masses(
 
         process_received_buffers(&mut buffers, mass_grid, n_grid, hunk_size, false, comm)
     }
-    // Flush
-    {
-        let hunk_index = hunk_index_from_grid_index(i, n_grid, comm.size);
-        // Keep if local.
-        if hunk_index == comm.rank {
-            let local_pencil_index = i - hunk_index * hunk_size;
-            mass_grid
-                .slice_mut(s![local_pencil_index, ..])
-                .add_assign(&buffer);
-            // Put the buffer back to be used in the next iteration.
-            buffers.push(buffer);
-        // Send if foreign.
-        } else {
-            comm.slab_channel.tx[hunk_index]
-                .send(SlabMessage::Msg {
-                    sent_by: comm.rank,
-                    pencil_index: i,
-                    slab: buffer,
-                })
-                .unwrap();
-        }
-    }
-    println!("Rank {} done", comm.rank);
+    flush_or_assign(buffer, &mut buffers, i, mass_grid, n_grid, hunk_size, comm);
+
     // Synchronize threads.
     {
         // Make sure I get all my buffers back before sending "finished" signal.
@@ -224,6 +182,37 @@ fn assign_masses(
                 process_received_buffers(&mut buffers, mass_grid, n_grid, hunk_size, false, comm);
             }
         }
+    }
+}
+
+/// Flush the buffer to another thread or assign it to mass grid.
+fn flush_or_assign(
+    buffer: MassSlab,
+    buffers: &mut Vec<MassSlab>,
+    pencil_index: GridIndex,
+    mass_grid: &mut MassGrid,
+    n_grid: usize,
+    hunk_size: usize,
+    comm: &mut ThreadComm,
+) {
+    let hunk_index = hunk_index_from_grid_index(pencil_index, n_grid, comm.size);
+    // Keep if local.
+    if hunk_index == comm.rank {
+        let local_pencil_index = pencil_index - hunk_index * hunk_size;
+        mass_grid
+            .slice_mut(s![local_pencil_index, ..])
+            .add_assign(&buffer);
+        // Put the buffer back to be used in the next iteration.
+        buffers.push(buffer);
+    // Send if foreign.
+    } else {
+        comm.slab_channel.tx[hunk_index]
+            .send(SlabMessage::Msg {
+                sent_by: comm.rank,
+                pencil_index: pencil_index,
+                slab: buffer,
+            })
+            .unwrap();
     }
 }
 
