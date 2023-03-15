@@ -17,6 +17,6 @@ pub const DIM: usize = 2;
 
 pub type MassEntry = u32;
 pub type MassGrid = Array<MassEntry, Dim<[usize; DIM]>>;
-// Single slab of mass grid plus its grid index.
-pub type MassSlab = Array1<MassEntry>;
+// Single pencil of mass grid plus its grid index.
+pub type MassPencil = Array1<MassEntry>;
 pub type Particle = [SpaceCoordinate; DIM];

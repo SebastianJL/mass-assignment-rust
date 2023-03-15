@@ -3,33 +3,25 @@ use lockfree::channel::mpsc::{Receiver, Sender};
 use lockfree::channel::{mpsc, RecvErr};
 
 use crate::coordinates::GridIndex;
-use crate::{MassEntry, MassSlab};
-
-// #[derive(Debug)]
-// pub struct SlabMessage {
-//     // Rank of thread that sent the message.
-//     pub sent_by: usize,
-//     pub slab_index: GridIndex,
-//     pub slab: MassSlab,
-// }
+use crate::{MassEntry, MassPencil};
 
 #[derive(Debug)]
-pub enum SlabMessage {
+pub enum BufferMessage {
     Msg {
         // Rank of thread that sent the message.
         sent_by: usize,
-        slab_index: GridIndex,
-        slab: MassSlab,
+        pencil_index: GridIndex,
+        buffer: MassPencil,
     },
     Ack {
-        slab: MassSlab,
+        buffer: MassPencil,
     },
 }
 
 #[derive(Debug)]
-pub struct SlabChannel {
-    pub rx: Receiver<SlabMessage>,
-    pub tx: Vec<Sender<SlabMessage>>,
+pub struct BufferChannel {
+    pub rx: Receiver<BufferMessage>,
+    pub tx: Vec<Sender<BufferMessage>>,
 }
 
 #[derive(Debug)]
@@ -49,8 +41,8 @@ pub struct ThreadComm {
     pub rank: usize,
     // Total number of threads.
     pub size: usize,
-    // Channel for sending a slab of a mass grid.
-    pub slab_channel: SlabChannel,
+    // Channel for sending buffers for the mass grid.
+    pub buffer_channel: BufferChannel,
     // Channel for gathering total mass in rank 0.
     pub mass_channel: MassChannel,
     // Channel for synchronization task.
@@ -59,7 +51,7 @@ pub struct ThreadComm {
 
 impl ThreadComm {
     pub fn create_communicators(number: usize) -> Vec<ThreadComm> {
-        let (slab_senders, slab_receivers): (Vec<_>, Vec<_>) =
+        let (buffer_senders, buffer_receivers): (Vec<_>, Vec<_>) =
             (0..number).map(|_| mpsc::create()).unzip();
         let (mass_senders, mass_receivers): (Vec<_>, Vec<_>) =
             (0..number).map(|_| mpsc::create()).unzip();
@@ -67,15 +59,15 @@ impl ThreadComm {
             (0..number).map(|_| mpsc::create()).unzip();
 
         let mut communicators: Vec<ThreadComm> = vec![];
-        for (i, (slab_receiver, mass_receiver, sync_receiver)) in
-            izip!(slab_receivers, mass_receivers, sync_receivers).enumerate()
+        for (i, (buffer_receiver, mass_receiver, sync_receiver)) in
+            izip!(buffer_receivers, mass_receivers, sync_receivers).enumerate()
         {
             let comm = ThreadComm {
                 rank: i,
                 size: number,
-                slab_channel: SlabChannel {
-                    rx: slab_receiver,
-                    tx: slab_senders.clone(),
+                buffer_channel: BufferChannel {
+                    rx: buffer_receiver,
+                    tx: buffer_senders.clone(),
                 },
                 mass_channel: MassChannel {
                     rx: mass_receiver,

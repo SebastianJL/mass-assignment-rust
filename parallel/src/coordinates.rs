@@ -4,7 +4,7 @@ use crate::{Float, MAX, MIN};
 pub type SpaceCoordinate = Float;
 /// 1D discrete coordinate on grid.
 pub type GridIndex = usize;
-/// 1D discrete coordinate of hunk (multiple slabs of grid).
+/// 1D discrete coordinate of hunk (multiple pencils of grid).
 pub type HunkIndex = usize;
 /// 1D discrete coordinate of super cell.
 pub type CellIndex = usize;
