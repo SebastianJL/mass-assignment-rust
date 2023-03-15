@@ -6,7 +6,7 @@ use std::time::Instant;
 use itertools::Itertools;
 use lockfree::channel::RecvErr;
 use ndarray::s;
-use parallel::config::{read_config, Config};
+use parallel::config::{read_config, Settings};
 use parallel::coordinates::{get_chunk_size, get_hunk_size, hunk_index_from_grid_index};
 use parallel::thread_comm::{BufferMessage, ThreadComm};
 use parallel::{coordinates::grid_index_from_coordinate, MAX, MIN};
@@ -22,7 +22,7 @@ fn main() {
     #[cfg(feature = "dhat-heap")]
     let _profiler = dhat::Profiler::new_heap();
 
-    let Config {
+    let Settings {
         n_particles,
         n_grid,
         n_threads,
@@ -89,9 +89,12 @@ fn main() {
 
 /// Generate random particles. Particles are layed out as a simple array with shape (`N_PARTICLES`, DIM)
 /// that describe coordinates of the particle.
-fn generate_particles(n_particles: usize, seed: u64) -> Vec<Particle> {
-    let mut rng = <StdRng as rand::SeedableRng>::seed_from_u64(seed);
-    // let mut rng = rand::thread_rng();
+fn generate_particles(n_particles: usize, seed: Option<u64>) -> Vec<Particle> {
+    let mut rng = if let Some(number) = seed {
+        <StdRng as rand::SeedableRng>::seed_from_u64(number)
+    } else {
+        <StdRng as rand::SeedableRng>::from_entropy()
+    };
     (0..n_particles)
         .map(|_| {
             [
