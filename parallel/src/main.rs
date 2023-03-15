@@ -39,7 +39,11 @@ fn main() {
     let hunk_size: usize = get_hunk_size(n_grid, n_threads);
     let mut communicators = ThreadComm::create_communicators(n_threads);
     let mut particles = generate_particles(n_particles, seed);
-    particles.par_sort_unstable_by(|p1, p2| p1[0].total_cmp(&p2[0]));
+    particles.par_sort_unstable_by_key(|p| {
+        let i = grid_index_from_coordinate(p[0], n_grid).min(n_grid - 1);
+        let j = grid_index_from_coordinate(p[1], n_grid).min(n_grid - 1);
+        (i, j)
+    });
 
     let start = Instant::now();
     thread::scope(|s| {
@@ -107,7 +111,7 @@ fn assign_masses(
     n_grid: usize,
     comm: &mut ThreadComm,
 ) {
-    assert!(is_sorted(particles));
+    assert!(is_sorted(particles, n_grid));
     const MAX_PARTICLES_PROCESSED: usize = 1024;
     const MAX_BUFFERS: usize = 4;
 
@@ -206,7 +210,14 @@ fn assign_masses(
                 }
 
                 // Process incoming slabs.
-                process_received_buffers(&mut slab_buffers, mass_grid, n_grid, hunk_size, false, comm);
+                process_received_buffers(
+                    &mut slab_buffers,
+                    mass_grid,
+                    n_grid,
+                    hunk_size,
+                    false,
+                    comm,
+                );
             }
         }
     }
@@ -246,8 +257,15 @@ fn process_received_buffers(
     }
 }
 
-fn is_sorted(particles: &[[f32; 2]]) -> bool {
-    particles.windows(2).all(|w| w[0][0] <= w[1][0])
+fn is_sorted(particles: &[[f32; 2]], n_grid: usize) -> bool {
+    particles.windows(2).all(|win| {
+        let i0 = grid_index_from_coordinate(win[0][0], n_grid).min(n_grid - 1);
+        let j0 = grid_index_from_coordinate(win[0][1], n_grid).min(n_grid - 1);
+        let i1 = grid_index_from_coordinate(win[1][0], n_grid).min(n_grid - 1);
+        let j1 = grid_index_from_coordinate(win[1][1], n_grid).min(n_grid - 1);
+        
+        (i0, j0) <= (i1, j1)
+    })
 }
 
 #[cfg(test)]
@@ -312,7 +330,7 @@ mod test {
                     let mut mass_grid = MassGrid::zeros([hunk_size, N_GRID]);
                     p_local.sort_unstable_by(|p1, p2| p1[0].total_cmp(&p2[0]));
                     assign_masses(p_local, &mut mass_grid, N_GRID, comm);
-                    
+
                     println!("rank {}, mass_grid = {}", comm.rank, &mass_grid);
                     let mass_grid_precalculated = match comm.rank {
                         0 => array![[2, 0, 1, 0]],
@@ -321,7 +339,11 @@ mod test {
                         3 => array![[0, 0, 0, 1]],
                         _ => panic!("There shouldn't be more then {n_threads} threads."),
                     };
-                    assert_eq!(mass_grid, mass_grid_precalculated, "offending thread: {}", comm.rank);
+                    assert_eq!(
+                        mass_grid, mass_grid_precalculated,
+                        "offending thread: {}",
+                        comm.rank
+                    );
                 });
             }
         });
