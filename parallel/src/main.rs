@@ -263,7 +263,7 @@ fn is_sorted(particles: &[[f32; 2]], n_grid: usize) -> bool {
         let j0 = grid_index_from_coordinate(win[0][1], n_grid).min(n_grid - 1);
         let i1 = grid_index_from_coordinate(win[1][0], n_grid).min(n_grid - 1);
         let j1 = grid_index_from_coordinate(win[1][1], n_grid).min(n_grid - 1);
-        
+
         (i0, j0) <= (i1, j1)
     })
 }

@@ -30,7 +30,6 @@ fn main() {
     dbg!(&mass_grid);
     let total: i32 = mass_grid.iter().sum();
     dbg!(total);
-
 }
 
 /// Generate random particles. Particles are layed out as a simple array with shape (N_PARTICLE, DIM)
@@ -76,12 +75,8 @@ mod test {
         const N_GRID: usize = 4;
         let mut mass_grid = MassGrid::default([N_GRID; DIM]);
         assign_masses::<N_GRID>(&particles, &mut mass_grid);
-        let mass_grid_precalculated = array![
-            [2, 0, 1, 0],
-            [0, 0, 0, 0],
-            [0, 0, 1, 0],
-            [0, 0, 0, 1],
-        ];
+        let mass_grid_precalculated =
+            array![[2, 0, 1, 0], [0, 0, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1],];
         assert_eq!(mass_grid, mass_grid_precalculated);
     }
 }
