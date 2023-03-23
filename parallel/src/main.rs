@@ -28,7 +28,11 @@ fn main() {
         n_threads,
         seed,
     } = read_config();
-    dbg!(seed);
+    match seed {
+        Some(seed) => {dbg!(seed);},
+        None => {dbg!(seed);}
+    }
+    
     dbg!(n_particles);
     dbg!(n_grid);
     dbg!(n_threads);
