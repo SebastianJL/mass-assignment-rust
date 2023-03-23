@@ -2,6 +2,7 @@ import argparse
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+import itertools as it
 
 
 def init_argparse() -> argparse.ArgumentParser:
@@ -32,14 +33,17 @@ def parse_data(file):
         line_iter = iter(in_file)
         data = []
         while True:
-            try:
-                # Skip first two lines of each block
-                next(line_iter)
-                next(line_iter)
-            except StopIteration:
+            # try:
+            #     # Skip first two lines of each block
+            #     next(line_iter)
+            #     next(line_iter)
+            # except StopIteration:
+            #     break
+            next_n_lines = list(it.islice(line_iter, len(columns)))
+            if not next_n_lines:
                 break
             row = []
-            for column, line in zip(columns, line_iter):
+            for column, line in zip(columns, next_n_lines):
                 print(line)
                 row.append(line.split(f"{column} = ")[1].strip())
             data.append(row)
