@@ -33,18 +33,12 @@ def parse_data(file):
         line_iter = iter(in_file)
         data = []
         while True:
-            # try:
-            #     # Skip first two lines of each block
-            #     next(line_iter)
-            #     next(line_iter)
-            # except StopIteration:
-            #     break
             next_n_lines = list(it.islice(line_iter, len(columns)))
             if not next_n_lines:
                 break
             row = []
             for column, line in zip(columns, next_n_lines):
-                print(line)
+                # print(line)
                 row.append(line.split(f"{column} = ")[1].strip())
             data.append(row)
     df = pd.DataFrame(data, columns=columns)
@@ -66,30 +60,11 @@ def main() -> None:
     args = parser.parse_args()
     for file in args.files:
         data = parse_data(file)
-        # print(data)
-        # print(data.dtypes)
-
         fig, ax = plt.subplots(1)
-        print(data.dtypes)
-        print(data.head())
-        # exit()
         d = data[['n_threads', 'runtime']].groupby('n_threads')
-        means = d.mean(numeric_only=True).reset_index()
-        # mins = d.min(numeric_only=True).reset_index()
-        # # stds = d.std(numeric_only=True).reset_index()
-        # # stderr = stds['runtime'].values / np.sqrt(d.count()['runtime'].values)
-        # # stderr = stderr['runtime'].values
-        # # print(stds)
-        # # print(d.count())
-        # # print(stderr)
-        # # exit()
-        speedup = means['runtime'][0] / means['runtime']
-        # speedup_mins = means['runtime'][0] / mins['runtime']
-        # relerr = stderr / means['runtime'].values + stderr[0] / means['runtime'].values[0]
-        # speedup_err = relerr * speedup
-        ax.plot(data['n_threads'], data['runtime'][0]/data['runtime'], 'o', label="all")
-        ax.plot(means['n_threads'], speedup, 'o', label="mean")
-        # ax.plot(mins['n_threads'], speedup_mins,'o', label="fastest")
+        mins = d.min(numeric_only=True).reset_index()
+        speedup = mins['runtime'][0] / mins['runtime']
+        ax.plot(mins['n_threads'], speedup,'o', label="fastest")
         ax.plot(data['n_threads'], data['n_threads'], label='ideal')
         ax.set_xlabel('# threads')
         ax.set_ylabel('speedup')
