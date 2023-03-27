@@ -19,9 +19,12 @@ def main() -> None:
         print(data.head())
         d = data[["n_threads", "runtime"]].groupby("n_threads")
         means = d.mean(numeric_only=True).reset_index()
+        mins = d.min(numeric_only=True).reset_index()
         efficiency = means["runtime"][0] / means["runtime"]
+        efficiency = mins["runtime"][0] / mins["runtime"]
 
-        ax.plot(means["n_threads"], efficiency, "o", label="mean")
+        # ax.plot(means["n_threads"], efficiency, "o", label="mean")
+        ax.plot(mins["n_threads"], efficiency, "o", label="fastest run of 10")
         ax.plot(means["n_threads"], np.ones(len(means)), label="ideal")
         ax.set_ylim(0, 1.1)
         ax.set_xlabel("# threads")
@@ -31,7 +34,7 @@ def main() -> None:
         ax.legend()
 
         if args.save:
-            fig.savefig(f"{file}_plot.svg")
+            fig.savefig(f"{file}_plot.png", dpi=300)
 
     if args.show:
         plt.show()

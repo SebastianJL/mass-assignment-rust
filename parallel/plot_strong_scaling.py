@@ -64,7 +64,7 @@ def main() -> None:
         d = data[['n_threads', 'runtime']].groupby('n_threads')
         mins = d.min(numeric_only=True).reset_index()
         speedup = mins['runtime'][0] / mins['runtime']
-        ax.plot(mins['n_threads'], speedup,'o', label="fastest")
+        ax.plot(mins['n_threads'], speedup,'o', label="fastest run of 10")
         ax.plot(data['n_threads'], data['n_threads'], label='ideal')
         ax.set_xlabel('# threads')
         ax.set_ylabel('speedup')
@@ -72,7 +72,7 @@ def main() -> None:
         fig.suptitle(args.title)
         ax.legend()
         if args.save:
-            fig.savefig(f"{file}_plot.svg")
+            fig.savefig(f"{file}_plot.png", dpi=300)
 
     if args.show:
         plt.show()
