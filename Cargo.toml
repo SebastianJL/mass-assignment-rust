@@ -4,5 +4,6 @@ members = [
     "serial",
 ]
 
-[profile.release]
-debug = 1  # For profiling with dhat.
+[profile.release-with-debug]
+inherits = "release"
+debug = true
