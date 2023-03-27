@@ -168,15 +168,16 @@ fn assign_masses(
         }
 
         // Keep if local.
-        if hunk_index == comm.rank {
-            let local_pencil_index = pencil_index - hunk_index * hunk_size;
-            mass_grid
-                .slice_mut(s![local_pencil_index, ..])
-                .add_assign(&local_buffer);
-            // Put the buffer back to be used in the next iteration.
-            buffers.push(local_buffer);
-        // Send if foreign.
-        } else {
+        // if hunk_index == comm.rank {
+        //     let local_pencil_index = pencil_index - hunk_index * hunk_size;
+        //     mass_grid
+        //         .slice_mut(s![local_pencil_index, ..])
+        //         .add_assign(&local_buffer);
+        //     // Put the buffer back to be used in the next iteration.
+        //     buffers.push(local_buffer);
+        // // Send if foreign.
+        // } else 
+        {
             comm.buffer_channel.tx[hunk_index]
                 .send(BufferMessage::Msg {
                     sent_by: comm.rank,
