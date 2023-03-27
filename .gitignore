@@ -2,3 +2,4 @@
 /.vscode
 /.idea
 **/dhat-heap.json*
+__pycache__
