@@ -16,6 +16,5 @@ dhat = "0.3.2"
 rayon = "1.6.1"
 
 
-
 [features]
 dhat-heap = []  # For profiling with dhat.
